@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>장바구니 - DeliveryApp</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+        }
+
+        header {
+            background-color: white;
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .cart-list {
+            padding: 20px;
+        }
+
+        .menu {
+            background-color: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 15px;
+        }
+
+        .price {
+            font-weight: bold;
+        }
+
+        .calories {
+            color: #777;
+        }
+
+        .quantity {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .quantity button {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ddd;
+            background-color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .delete {
+            margin-left: 10px;
+            padding: 7px 10px;
+            border: none;
+            background-color: #eee;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .total {
+            background-color: white;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 15px;
+        }
+
+        .order-button {
+            width: 100%;
+            padding: 15px;
+            margin-top: 15px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>🛒 장바구니</h1>
+    </header>
+
+    <main class="cart-list">
+
+        {% for item in menus %}
+
+        <div class="menu">
+
+            <h2>{{ item[0][1] }}</h2>
+
+            <div class="price">
+                {{ "{:,}".format(item[0][2]) }}원
+            </div>
+
+            <div class="calories">
+                {{ "{:,}".format(item[0][3]) }} kcal
+            </div>
+
+            <div class="quantity">
+
+                <form action="/cart/minus" method="POST">
+                    <input type="hidden" name="menu_id" value="{{ item[0][0] }}">
+                    <button type="submit">−</button>
+                </form>
+
+                <span>{{ item[1] }}</span>
+
+                <form action="/cart/add" method="POST">
+                    <input type="hidden" name="menu_id" value="{{ item[0][0] }}">
+                    <button type="submit">+</button>
+                </form>
+
+                <form action="/cart/delete" method="POST">
+                    <input type="hidden" name="menu_id" value="{{ item[0][0] }}">
+                    <button class="delete" type="submit">삭제</button>
+                </form>
+
+            </div>
+
+        </div>
+
+        {% endfor %}
+
+        <div class="total">
+
+            {% set total_price = namespace(value=0) %}
+            {% set total_calories = namespace(value=0) %}
+
+            {% for item in menus %}
+            {% set total_price.value = total_price.value + (item[0][2] * item[1]) %}
+            {% set total_calories.value = total_calories.value + (item[0][3] * item[1]) %}
+            {% endfor %}
+
+            <h2>장바구니 합계</h2>
+
+            <p>
+                총 금액:
+                <strong>{{ "{:,}".format(total_price.value) }}원</strong>
+            </p>
+
+            <p>
+                총 칼로리:
+                <strong>{{ "{:,}".format(total_calories.value) }} kcal</strong>
+            </p>
+
+            <form action="/order" method="POST">
+                <button class="order-button" type="submit">
+                    주문하기
+                </button>
+            </form>
+
+        </div>
+
+    </main>
+
+</body>
+
+</html>

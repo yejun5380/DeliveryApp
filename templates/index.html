@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>DeliveryApp</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+        }
+
+        header {
+            background-color: white;
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        header h1 {
+            margin: 0;
+        }
+
+        .search {
+            margin-top: 15px;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+
+        .restaurant-list {
+            padding: 20px;
+        }
+
+        .restaurant {
+            display: block;
+            background-color: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            text-decoration: none;
+            color: black;
+        }
+
+        .restaurant h2 {
+            margin-top: 0;
+        }
+
+        .category {
+            color: #777;
+        }
+
+        .description {
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>🍴 DeliveryApp</h1>
+        <input class="search" type="text" placeholder="음식점이나 메뉴를 검색해보세요">
+    </header>
+
+    <main class="restaurant-list">
+
+        {% for restaurant in restaurants %}
+
+        <a href="/restaurant/{{ restaurant[0] }}" class="restaurant">
+
+            <h2>{{ restaurant[1] }}</h2>
+
+            <div class="category">
+                {{ restaurant[2] }}
+            </div>
+
+            <p class="description">
+                {{ restaurant[3] }}
+            </p>
+
+        </a>
+
+        {% endfor %}
+
+    </main>
+
+</body>
+
+</html>

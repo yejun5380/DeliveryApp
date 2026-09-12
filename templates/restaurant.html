@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>{{ restaurant[1] }} - DeliveryApp</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+        }
+
+        header {
+            background-color: white;
+            padding: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .menu-list {
+            padding: 20px;
+        }
+
+        .menu {
+            background-color: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 15px;
+        }
+
+        .price {
+            font-weight: bold;
+        }
+
+        .calories {
+            color: #777;
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>{{ restaurant[1] }}</h1>
+        <p>{{ restaurant[2] }}</p>
+        <p>{{ restaurant[3] }}</p>
+    </header>
+
+    <main class="menu-list">
+
+        <h2>메뉴</h2>
+
+        {% for menu in menus %}
+
+        <div class="menu">
+
+            <h3>{{ menu[1] }}</h3>
+
+            <p>
+                {{ menu[4] }}
+            </p>
+
+            <div class="price">
+                {{ "{:,}".format(menu[2]) }}원
+            </div>
+
+            <div class="calories">
+                {{ "{:,}".format(menu[3]) }} kcal
+            </div>
+
+            <form action="/cart/add" method="POST">
+                <input type="hidden" name="menu_id" value="{{ menu[0] }}">
+                <button type="submit">장바구니 담기</button>
+            </form>
+
+        </div>
+
+        {% endfor %}
+
+    </main>
+
+</body>
+
+</html>
