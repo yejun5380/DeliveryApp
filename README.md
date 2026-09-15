@@ -19,7 +19,7 @@
 
 ### Backend
 * Python 3
-* Flask (웹 프레임워크)
+* Flask
 
 ### Database
 * MySQL / MySQL Workbench
