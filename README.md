@@ -35,7 +35,6 @@
 ```text
 프젝/
 ├─ app.py               # Flask 백엔드 서버 메인 파일
-├─ project.html         # 작업 메모 및 참고용 파일
 ├─ memo.txt             # 프로젝트 개발 노트
 ├─ DB/
 │  └─ schema.sql        # 데이터베이스 생성 및 테이블 스키마 SQL
