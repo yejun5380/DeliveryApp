@@ -18,6 +18,16 @@
             border-bottom: 1px solid #ddd;
         }
 
+        .back-button {
+            margin: 15px 20px 0;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
         .menu-list {
             padding: 20px;
         }
@@ -49,8 +59,16 @@
 
 <body>
 
+    <button class="back-button" type="button" onclick="history.back()">
+        ← 뒤로가기
+    </button>
+
     <header>
-        <h1>{{ restaurant[1] }}</h1>
+        <a href="/" style="text-decoration: none; color: inherit;">
+            <h1>🍴 DeliveryApp</h1>
+        </a>
+
+        <h2>{{ restaurant[1] }}</h2>
         <p>{{ restaurant[2] }}</p>
         <p>{{ restaurant[3] }}</p>
     </header>

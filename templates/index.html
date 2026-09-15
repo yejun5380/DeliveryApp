@@ -64,8 +64,28 @@
 <body>
 
     <header>
-        <h1>🍴 DeliveryApp</h1>
-        <input class="search" type="text" placeholder="음식점이나 메뉴를 검색해보세요">
+        <a href="/" style="text-decoration: none; color: inherit;">
+            <h1>🍴 DeliveryApp</h1>
+        </a>
+
+        <form action="/" method="GET">
+            <input class="search" type="text" name="search" value="{{ search }}" placeholder="음식점이나 메뉴를 검색해보세요">
+        </form>
+
+        {% if nickname %}
+
+        <p>{{ nickname }}님 환영합니다!</p>
+
+        <a href="/orders">주문(절약)내역</a>
+        <a href="/saving">절약 통계</a>
+        <a href="/logout">로그아웃</a>
+
+        {% else %}
+
+        <a href="/login">로그인</a>
+        <a href="/signup">회원가입</a>
+
+        {% endif %}
     </header>
 
     <main class="restaurant-list">

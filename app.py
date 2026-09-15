@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, session
 import mysql.connector
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
 import os
 
 app = Flask(__name__)
@@ -22,17 +23,35 @@ def home():
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    cursor.execute("""
-        SELECT id, name, category, description
-        FROM restaurants
-    """)
+    search = request.args.get("search", "")
+
+    if search:
+        cursor.execute("""
+            SELECT DISTINCT r.id, r.name, r.category, r.description
+            FROM restaurants r
+            LEFT JOIN menus m ON r.id = m.restaurant_id
+            WHERE r.name LIKE %s
+               OR m.name LIKE %s
+        """, (f"%{search}%", f"%{search}%"))
+    else:
+        cursor.execute("""
+            SELECT id, name, category, description
+            FROM restaurants
+        """)
 
     restaurants = cursor.fetchall()
 
     cursor.close()
     connection.close()
 
-    return render_template("index.html", restaurants=restaurants)
+    nickname = session.get("nickname")
+
+    return render_template(
+        "index.html",
+        restaurants=restaurants,
+        nickname=nickname,
+        search=search
+    )
 
 
 @app.route("/restaurant/<int:restaurant_id>")
@@ -151,7 +170,10 @@ def order():
     connection = get_db_connection()
     cursor = connection.cursor()
 
-    user_id = 1
+    user_id = session.get("user_id")
+
+    if not user_id:
+        return redirect("/login")
 
     total_price = 0
     total_calories = 0
@@ -210,6 +232,148 @@ def order():
 @app.route("/order/complete")
 def order_complete():
     return render_template("order_complete.html")
+
+@app.route("/orders")
+def orders():
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    user_id = session.get("user_id")
+
+    if not user_id:
+        return redirect("/login")
+
+    cursor.execute("""
+        SELECT id, order_date, total_price, total_calories
+        FROM orders
+        WHERE user_id = %s
+        ORDER BY order_date DESC
+    """, (user_id,))
+
+    orders = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return render_template("orders.html", orders=orders)
+
+@app.route("/saving")
+def saving():
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    user_id = session.get("user_id")
+
+    if not user_id:
+        cursor.close()
+        connection.close()
+        return redirect("/login")
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(total_price), 0),
+            COALESCE(SUM(total_calories), 0)
+        FROM orders
+        WHERE user_id = %s
+    """, (user_id,))
+
+    saving_data = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return render_template(
+        "saving.html",
+        saving_data=saving_data
+    )
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+
+    if request.method == "GET":
+        return render_template("signup.html")
+
+    username = request.form["username"]
+    password = generate_password_hash(request.form["password"])
+    nickname = request.form["nickname"]
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO users (username, password, nickname)
+        VALUES (%s, %s, %s)
+    """, (username, password, nickname))
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+    return redirect("/login")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+
+        connection = get_db_connection()
+        cursor = connection.cursor(buffered=True)
+
+        cursor.execute(
+            "SELECT id, nickname, password FROM users WHERE username = %s",
+            (username,)
+        )
+
+        user = cursor.fetchone()
+        cursor.close()
+
+        if user:
+            stored_password = user[2]
+            password_ok = False
+
+            if stored_password.startswith(("scrypt:", "pbkdf2:")):
+                password_ok = check_password_hash(
+                    stored_password,
+                    password
+                )
+            else:
+                password_ok = stored_password == password
+
+                if password_ok:
+                    new_password = generate_password_hash(password)
+
+                    update_cursor = connection.cursor(buffered=True)
+
+                    update_cursor.execute(
+                        "UPDATE users SET password = %s WHERE id = %s",
+                        (new_password, user[0])
+                    )
+
+                    connection.commit()
+                    update_cursor.close()
+
+            if password_ok:
+                session["user_id"] = user[0]
+                session["nickname"] = user[1]
+
+                connection.close()
+
+                return redirect("/")
+
+        connection.close()
+
+        return "아이디 또는 비밀번호가 틀렸습니다."
+
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)
+    session.pop("nickname", None)
+
+    return redirect("/")
 
 if __name__ == "__main__":
     app.run(debug=True)
