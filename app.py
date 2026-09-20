@@ -225,13 +225,23 @@ def order():
     cursor.close()
     connection.close()
 
+    session["last_order_price"] = total_price
+    session["last_order_calories"] = total_calories
+
     session["cart"] = {}
 
     return redirect("/order/complete")
 
 @app.route("/order/complete")
 def order_complete():
-    return render_template("order_complete.html")
+    saved_price = session.get("last_order_price", 0)
+    saved_calories = session.get("last_order_calories", 0)
+
+    return render_template(
+        "order_complete.html",
+        saved_price=saved_price,
+        saved_calories=saved_calories
+    )
 
 @app.route("/orders")
 def orders():
@@ -257,6 +267,53 @@ def orders():
 
     return render_template("orders.html", orders=orders)
 
+@app.route("/orders/<int:order_id>")
+def order_detail(order_id):
+    user_id = session.get("user_id")
+
+    if not user_id:
+        return redirect("/login")
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT id, order_date, total_price, total_calories
+        FROM orders
+        WHERE id = %s AND user_id = %s
+    """, (order_id, user_id))
+
+    order = cursor.fetchone()
+
+    if not order:
+        cursor.close()
+        connection.close()
+        return redirect("/orders")
+
+    cursor.execute("""
+        SELECT
+            m.name,
+            oi.quantity,
+            oi.price,
+            oi.calories,
+            r.name
+        FROM order_items oi
+        JOIN menus m ON oi.menu_id = m.id
+        JOIN restaurants r ON m.restaurant_id = r.id
+        WHERE oi.order_id = %s
+    """, (order_id,))
+
+    order_items = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return render_template(
+        "order_detail.html",
+        order=order,
+        order_items=order_items
+    )
+
 @app.route("/saving")
 def saving():
     connection = get_db_connection()
@@ -271,6 +328,7 @@ def saving():
 
     cursor.execute("""
         SELECT
+            COUNT(*),
             COALESCE(SUM(total_price), 0),
             COALESCE(SUM(total_calories), 0)
         FROM orders
@@ -374,6 +432,8 @@ def logout():
     session.pop("nickname", None)
 
     return redirect("/")
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)

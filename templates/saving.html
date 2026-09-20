@@ -10,15 +10,24 @@
 
     <h1>절약 통계</h1>
 
+    <h2>📦 총 가상 주문</h2>
+    <p>
+        {{ saving_data[0] }}회
+    </p>
+
     <h2>💰 총 절약 금액</h2>
     <p>
-        {{ "{:,}".format(saving_data[0]) }}원
+        {{ "{:,}".format(saving_data[1]) }}원
     </p>
 
     <h2>🔥 총 절약 칼로리</h2>
     <p>
-        {{ "{:,}".format(saving_data[1]) }} kcal
+        {{ "{:,}".format(saving_data[2]) }} kcal
     </p>
+
+    <a href="/orders">주문(절약)내역 보기</a>
+
+    <br><br>
 
     <a href="/">홈으로</a>
 

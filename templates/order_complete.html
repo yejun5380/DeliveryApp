@@ -67,10 +67,23 @@
 
             <h2>🎉 절약 성공!</h2>
 
-            <p>오늘의 가상 절약 내역이 저장되었습니다.</p>
+            <p>
+                이번 주문으로
+                <strong>{{ "{:,}".format(saved_price) }}원</strong>을
+                절약했습니다!
+            </p>
 
             <p>
-                주문 내역에서 확인할 수 있습니다.
+                <strong>{{ "{:,}".format(saved_calories) }} kcal</strong>의
+                섭취를 줄였습니다!
+            </p>
+
+            <p>
+                <a href="/orders">주문내역 확인하기</a>
+            </p>
+
+            <p>
+                <a href="/saving">전체 절약 통계 보기</a>
             </p>
 
         </div>

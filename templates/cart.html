@@ -78,6 +78,13 @@
             cursor: pointer;
             font-size: 16px;
         }
+
+        .empty-cart {
+            background-color: white;
+            padding: 40px 20px;
+            text-align: center;
+            border-radius: 15px;
+        }
     </style>
 </head>
 
@@ -88,6 +95,8 @@
     </header>
 
     <main class="cart-list">
+
+        {% if menus %}
 
         {% for item in menus %}
 
@@ -157,6 +166,24 @@
             </form>
 
         </div>
+
+        {% else %}
+
+        <div class="empty-cart">
+
+            <h2>🛒 장바구니가 비어 있습니다.</h2>
+
+            <p>
+                음식점에서 메뉴를 담아보세요.
+            </p>
+
+            <a href="/">
+                음식점 보러가기
+            </a>
+
+        </div>
+
+        {% endif %}
 
     </main>
 

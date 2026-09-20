@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>주문 상세 - DeliveryApp</title>
+</head>
+
+<body>
+
+    <h1>주문 #{{ order[0] }} 상세내역</h1>
+
+    <p>주문 날짜: {{ order[1] }}</p>
+
+    <hr>
+
+    {% for item in order_items %}
+
+    <div>
+
+        <p>음식점: {{ item[4] }}</p>
+
+        <h2>{{ item[0] }}</h2>
+
+        <p>수량: {{ item[1] }}개</p>
+
+        <p>
+            금액:
+            {{ "{:,}".format(item[2] * item[1]) }}원
+        </p>
+
+        <p>
+            칼로리:
+            {{ "{:,}".format(item[3] * item[1]) }} kcal
+        </p>
+
+        <hr>
+
+    </div>
+
+    {% endfor %}
+
+    <h2>
+        총 절약 금액:
+        {{ "{:,}".format(order[2]) }}원
+    </h2>
+
+    <h2>
+        총 절약 칼로리:
+        {{ "{:,}".format(order[3]) }} kcal
+    </h2>
+
+    <a href="/orders">
+        주문내역으로 돌아가기
+    </a>
+
+</body>
+
+</html>
