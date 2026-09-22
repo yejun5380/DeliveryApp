@@ -10,6 +10,8 @@
 
     <h1>주문(절약)내역</h1>
 
+    {% if orders %}
+
     {% for order in orders %}
 
     <div>
@@ -35,6 +37,17 @@
     </div>
 
     {% endfor %}
+
+    {% else %}
+
+    <p>아직 주문(절약)내역이 없습니다.</p>
+    <a href="/">음식점 보러가기</a>
+
+    {% endif %}
+
+    <p>
+        <a href="/">← 홈으로</a>
+    </p>
 
 </body>
 

@@ -86,8 +86,10 @@ def restaurant_detail(restaurant_id):
 
 @app.route("/cart/add", methods=["POST"])
 def add_cart():
-    menu_id = request.form["menu_id"]
+    if not session.get("user_id"):
+        return redirect("/login")
 
+    menu_id = request.form["menu_id"]
     cart = session.get("cart", {})
 
     if isinstance(cart, list):
@@ -105,6 +107,9 @@ def add_cart():
 
 @app.route("/cart")
 def cart():
+    if not session.get("user_id"):
+        return redirect("/login")
+
     cart = session.get("cart", {})
 
     connection = get_db_connection()
@@ -132,8 +137,10 @@ def cart():
 
 @app.route("/cart/minus", methods=["POST"])
 def cart_minus():
-    menu_id = request.form["menu_id"]
+    if not session.get("user_id"):
+        return redirect("/login")
 
+    menu_id = request.form["menu_id"]
     cart = session.get("cart", {})
 
     if menu_id in cart:
@@ -149,8 +156,10 @@ def cart_minus():
 
 @app.route("/cart/delete", methods=["POST"])
 def cart_delete():
-    menu_id = request.form["menu_id"]
+    if not session.get("user_id"):
+        return redirect("/login")
 
+    menu_id = request.form["menu_id"]
     cart = session.get("cart", {})
 
     if menu_id in cart:
@@ -234,8 +243,14 @@ def order():
 
 @app.route("/order/complete")
 def order_complete():
-    saved_price = session.get("last_order_price", 0)
-    saved_calories = session.get("last_order_calories", 0)
+    if not session.get("user_id"):
+        return redirect("/login")
+
+    saved_price = session.get("last_order_price")
+    saved_calories = session.get("last_order_calories")
+
+    if saved_price is None or saved_calories is None:
+        return redirect("/orders")
 
     return render_template(
         "order_complete.html",
@@ -347,24 +362,36 @@ def saving():
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
-
     if request.method == "GET":
         return render_template("signup.html")
 
     username = request.form["username"]
-    password = generate_password_hash(request.form["password"])
+    password = request.form["password"]
     nickname = request.form["nickname"]
 
     connection = get_db_connection()
-    cursor = connection.cursor()
+    cursor = connection.cursor(buffered=True)
+
+    cursor.execute(
+        "SELECT id FROM users WHERE username = %s",
+        (username,)
+    )
+
+    existing_user = cursor.fetchone()
+
+    if existing_user:
+        cursor.close()
+        connection.close()
+        return "이미 사용 중인 아이디입니다."
+
+    hashed_password = generate_password_hash(password)
 
     cursor.execute("""
         INSERT INTO users (username, password, nickname)
         VALUES (%s, %s, %s)
-    """, (username, password, nickname))
+    """, (username, hashed_password, nickname))
 
     connection.commit()
-
     cursor.close()
     connection.close()
 
@@ -430,9 +457,11 @@ def login():
 def logout():
     session.pop("user_id", None)
     session.pop("nickname", None)
+    session.pop("cart", None)
+    session.pop("last_order_price", None)
+    session.pop("last_order_calories", None)
 
     return redirect("/")
-
 
 
 if __name__ == "__main__":
