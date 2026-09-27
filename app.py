@@ -463,6 +463,48 @@ def logout():
 
     return redirect("/")
 
+@app.route("/address", methods=["GET", "POST"])
+def address():
+    user_id = session.get("user_id")
+
+    if not user_id:
+        return redirect("/login")
+
+    connection = get_db_connection()
+    cursor = connection.cursor(buffered=True)
+
+    if request.method == "POST":
+        user_address = request.form["address"]
+
+        cursor.execute("""
+            UPDATE users
+            SET address = %s
+            WHERE id = %s
+        """, (user_address, user_id))
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+
+        return redirect("/address")
+
+    cursor.execute("""
+        SELECT address
+        FROM users
+        WHERE id = %s
+    """, (user_id,))
+
+    user = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    current_address = user[0] if user else None
+
+    return render_template(
+        "address.html",
+        current_address=current_address
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)

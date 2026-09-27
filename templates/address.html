@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>배달 주소 - DeliveryApp</title>
+</head>
+<body>
+
+    <h1>배달 주소 설정</h1>
+
+    <form method="POST">
+        <label>배달 주소</label>
+
+        <input
+            type="text"
+            name="address"
+            value="{{ current_address or '' }}"
+            placeholder="배달 받을 주소를 입력하세요"
+            required
+        >
+
+        <button type="submit">주소 저장</button>
+    </form>
+
+    {% if current_address %}
+        <p>현재 배달 주소: {{ current_address }}</p>
+    {% else %}
+        <p>아직 등록된 배달 주소가 없습니다.</p>
+    {% endif %}
+
+    <p>
+        <a href="/">← 홈으로</a>
+    </p>
+
+</body>
+</html>
