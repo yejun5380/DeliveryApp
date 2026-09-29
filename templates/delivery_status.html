@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>배달현황 - DeliveryApp</title>
+</head>
+
+<body>
+
+    <h1>가상 배달현황</h1>
+
+    <p>주문번호: #{{ order[0] }}</p>
+    <p>주문시간: {{ order[1] }}</p>
+    <p>배달 주소: {{ order[2] }}</p>
+
+    <hr>
+
+    <h2 id="delivery-status">배달 상태 확인 중...</h2>
+    <p id="delivery-message"></p>
+
+    <hr>
+
+    <!-- 지도가 표시될 영역 -->
+    <div id="map" style="width:100%; height:400px;"></div>
+
+    <!--
+    카카오 지도 SDK를 불러온다.
+    services 라이브러리를 추가해서
+    주소 → 위도/경도 변환 기능을 사용할 수 있게 한다.
+-->
+    <script type="text/javascript"
+    src="//dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_javascript_key }}&libraries=services">
+</script>
+
+<script>
+    // 주문할 때 DB에 저장된 배달 주소를 가져온다.
+    const deliveryAddress = {{ order[2] | tojson }};
+
+    // 지도가 들어갈 영역
+    const mapContainer = document.getElementById("map");
+
+    // 일단 기본 위치로 지도를 생성한다.
+    const mapOption = {
+        center: new kakao.maps.LatLng(37.4506, 126.6570),
+        level: 3
+    };
+
+    const map = new kakao.maps.Map(mapContainer, mapOption);
+
+    // 주소를 좌표로 변환하기 위한 객체
+    const geocoder = new kakao.maps.services.Geocoder();
+
+    // DB에 저장된 배달 주소를 검색한다.
+    geocoder.addressSearch(deliveryAddress, function (result, status) {
+
+        // 주소 검색에 성공한 경우
+        if (status === kakao.maps.services.Status.OK) {
+
+            // 검색된 위도와 경도로 좌표 생성
+            const coords = new kakao.maps.LatLng(
+                result[0].y,
+                result[0].x
+            );
+
+            // 배달 주소 위치에 마커 생성
+            const marker = new kakao.maps.Marker({
+                map: map,
+                position: coords
+            });
+
+            // 지도 중심을 배달 주소 위치로 이동
+            map.setCenter(coords);
+        }
+    });
+</script>
+
+    <a href="/orders/{{ order[0] }}">주문 상세보기</a>
+    <a href="/orders">주문내역</a>
+
+    <script>
+        const orderTime = new Date("{{ order[1].strftime('%Y-%m-%dT%H:%M:%S') }}");
+
+        function updateDeliveryStatus() {
+            const now = new Date();
+            const elapsedSeconds = Math.floor((now - orderTime) / 1000);
+
+            const statusElement = document.getElementById("delivery-status");
+            const messageElement = document.getElementById("delivery-message");
+
+            if (elapsedSeconds < 20) {
+                statusElement.innerText = "주문 접수";
+                messageElement.innerText = "음식점에서 주문을 확인하고 있습니다.";
+            } else if (elapsedSeconds < 40) {
+                statusElement.innerText = "음식 준비중";
+                messageElement.innerText = "음식점에서 음식을 준비하고 있습니다.";
+            } else if (elapsedSeconds < 60) {
+                statusElement.innerText = "배달기사 배정";
+                messageElement.innerText = "배달기사가 음식점으로 이동하고 있습니다.";
+            } else if (elapsedSeconds < 80) {
+                statusElement.innerText = "배달중";
+                messageElement.innerText = "배달기사가 배달 주소로 이동하고 있습니다.";
+            } else {
+                statusElement.innerText = "가상 배달 완료";
+                messageElement.innerText = "가상 배달이 완료되었습니다.";
+            }
+        }
+
+        updateDeliveryStatus();
+        setInterval(updateDeliveryStatus, 1000);
+    </script>
+
+</body>
+
+</html>

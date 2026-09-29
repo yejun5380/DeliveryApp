@@ -12,6 +12,12 @@
 
     <p>주문 날짜: {{ order[1] }}</p>
 
+    {% if order[4] %}
+    <p>배달 주소: {{ order[4] }}</p>
+    {% else %}
+    <p>배달 주소: 저장된 주소 없음</p>
+    {% endif %}
+
     <hr>
 
     {% for item in order_items %}
@@ -49,6 +55,14 @@
         총 절약 칼로리:
         {{ "{:,}".format(order[3]) }} kcal
     </h2>
+
+    <p>
+        <a href="/delivery/{{ order[0] }}">🚴 배달현황 보기</a>
+    </p>
+
+    <p>
+        <a href="/orders">← 주문내역으로 돌아가기</a>
+    </p>
 
     <a href="/orders">
         주문내역으로 돌아가기

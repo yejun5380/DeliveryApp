@@ -201,9 +201,30 @@ def order():
             total_calories += menu[1] * quantity
 
     cursor.execute("""
-        INSERT INTO orders (user_id, total_price, total_calories)
-        VALUES (%s, %s, %s)
-    """, (user_id, total_price, total_calories))
+    SELECT address
+    FROM users
+    WHERE id = %s
+    """, (user_id,))
+
+    user = cursor.fetchone()
+
+    if not user or not user[0]:
+        cursor.close()
+        connection.close()
+        return redirect("/address")
+
+    delivery_address = user[0]
+
+    cursor.execute("""
+        INSERT INTO orders
+        (user_id, total_price, total_calories, delivery_address)
+        VALUES (%s, %s, %s, %s)
+    """, (
+        user_id,
+        total_price,
+        total_calories,
+        delivery_address
+    ))
 
     order_id = cursor.lastrowid
 
@@ -293,7 +314,7 @@ def order_detail(order_id):
     cursor = connection.cursor()
 
     cursor.execute("""
-        SELECT id, order_date, total_price, total_calories
+        SELECT id, order_date, total_price, total_calories, delivery_address
         FROM orders
         WHERE id = %s AND user_id = %s
     """, (order_id, user_id))
@@ -504,6 +525,38 @@ def address():
     return render_template(
         "address.html",
         current_address=current_address
+    )
+
+@app.route("/delivery/<int:order_id>")
+def delivery_status(order_id):
+    user_id = session.get("user_id")
+
+    if not user_id:
+        return redirect("/login")
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT id, order_date, delivery_address
+        FROM orders
+        WHERE id = %s AND user_id = %s
+    """, (order_id, user_id))
+
+    order = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    if not order:
+        return redirect("/orders")
+
+    kakao_javascript_key = os.getenv("KAKAO_JAVASCRIPT_KEY")
+
+    return render_template(
+        "delivery_status.html",
+        order=order,
+        kakao_javascript_key=kakao_javascript_key
     )
 
 if __name__ == "__main__":
