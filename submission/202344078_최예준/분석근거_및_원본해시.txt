@@ -25,7 +25,8 @@ DB/address.sql: users.address VARCHAR(255) 추가
 DB/restaurant_query.sql: orders부터 restaurants까지 4테이블 JOIN 예시
 DB/add menus.sql: 음식점·메뉴 데이터 구성. 실행 및 제출 제외.
 templates/delivery_status.html: Geocoder, 좌표 배열, Haversine, 5km 판정, 상태 갱신
-README.md: 개발 목적·주차별 기록·향후 계획
+README.md: 로컬 개발 목적·주차 기록
+origin/master:README.md (4acace6): 5·7·8주차 기록 및 현재 범위·향후 계획
 presentation/week4_presentation.html: 파일명 4주차 / 본문 제목 3주차
 presentation/week5_presentation.html: 주소 스냅샷·가상 상태·지도
 presentation/week7_presentation.html: 음식점 JOIN·마커·범위
@@ -40,7 +41,7 @@ d1279e976e9e7158b95d4f0072070b9eadfbe766ae7064d0c0c78412f48c6276  memo.txt
 d4ccc08f6c0ff3199f84db86aef8aef1c391d3c04d6e9c35a1256121301361b6  DB\address.sql
 de2900c2ffdc19bce3eca562d96c4ad8c7e64eded401fad314ca08791971380d  DB\restaurant_query.sql
 de500893c1ad69790828573111e4be319d125010eb625ba9f6e383b28b80c24f  DB\schema.sql
-ca349ffdc3665eb0e0fdc034370c894c61e6923b5f420be5289086a4bcf866e9  presentation\README.md
+d1f41cecb07d67a44140c6a159f96159ebefd993f82d9fa4a42d06c355faffec  presentation\README.md
 19e67d2a237f9347c795f18f4bb4d93687943479a3ecf855a15eb02f0dba2e2d  presentation\week4_presentation.html
 3f27b2264efc0b7d376595e1cca088eda9f8ee2206e8f57090679ec2c51170a1  presentation\week5_presentation.html
 4a1e084ce593d579d4aa344ecf880d9642367f1f05597ff9b9b7ca927174149b  presentation\week7_presentation.html

@@ -1,0 +1,8 @@
+flowchart TD
+ S[Flask 세션: user_id, nickname, cart, 직전 합계]
+ S --> L[로그아웃: 로그인 정보 및 cart와 직전 합계 제거]
+ N[다른 계정 로그인 성공] --> U[user_id 및 nickname 교체]
+ U --> K[cart 및 직전 합계 유지: 계정 전환 한계]
+ S --> O[가상 주문]
+ O --> DB[(orders 및 order_items: 주소와 금액 스냅샷)]
+ O --> C[commit 후 cart 비우기]
