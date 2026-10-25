@@ -1,0 +1,12 @@
+flowchart LR
+ A[홈 /] --> B[음식점 /restaurant/id]
+ B --> C[장바구니 /cart]
+ C --> D[가상 주문 POST /order]
+ D --> E[완료 /order/complete]
+ E --> F[내역 /orders]
+ F --> G[상세 /orders/id]
+ G --> H[배달현황 /delivery/id]
+ A --> I[가입 /signup 및 로그인 /login]
+ A --> J[주소 /address]
+ A --> K[통계 /saving]
+ E --> K

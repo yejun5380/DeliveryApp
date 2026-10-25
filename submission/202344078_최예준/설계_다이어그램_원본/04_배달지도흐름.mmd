@@ -1,0 +1,15 @@
+flowchart TD
+ A[본인 주문 확인] --> B[음식점 JOIN: DISTINCT 및 주소 필터]
+ B --> C[템플릿 order 및 restaurants 전달]
+ C --> D[배달 주소 및 음식점별 addressSearch]
+ D --> E{검색 성공?}
+ E -->|예| F[좌표 저장 및 마커 정보창 생성]
+ F --> G[bounds 확장 및 성공 수 증가]
+ G --> H[완료 수 증가]
+ E -->|아니오| H
+ H --> I{모든 검색 완료?}
+ I -->|아니오| J[다음 콜백 대기]
+ I -->|예| K[성공 좌표 존재 시 setBounds]
+ K --> L[좌표 없으면 안내 또는 Haversine 거리 계산]
+ L --> M[5km 기준 판정 및 소수 둘째 자리 출력]
+ C --> N[별도: order_date 기반 1초 주기 상태 갱신]

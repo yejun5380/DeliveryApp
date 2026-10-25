@@ -1,0 +1,58 @@
+DeliveryApp 분석 근거 목록
+학번 202344078 / 이름 최예준
+
+검토 범위: 파일 읽기·소스 구문 및 격리 검증. 운영 DB 접속/변경 없음.
+app.py:11-19 get_db_connection
+app.py:22-54 home
+app.py:58-85 restaurant_detail
+app.py:88-105 add_cart
+app.py:109-135 cart
+app.py:139-154 cart_minus
+app.py:158-170 cart_delete
+app.py:173-263 order
+app.py:266-280 order_complete
+app.py:283-304 orders
+app.py:307-351 order_detail
+app.py:354-382 saving
+app.py:385-419 signup
+app.py:422-475 login
+app.py:478-485 logout
+app.py:488-528 address
+app.py:531-575 delivery_status
+
+DB/schema.sql: 초기 5개 테이블 및 4개 FK 선언
+DB/address.sql: users.address VARCHAR(255) 추가
+DB/restaurant_query.sql: orders부터 restaurants까지 4테이블 JOIN 예시
+DB/add menus.sql: 음식점·메뉴 데이터 구성. 실행 및 제출 제외.
+templates/delivery_status.html: Geocoder, 좌표 배열, Haversine, 5km 판정, 상태 갱신
+README.md: 개발 목적·주차별 기록·향후 계획
+presentation/week4_presentation.html: 파일명 4주차 / 본문 제목 3주차
+presentation/week5_presentation.html: 주소 스냅샷·가상 상태·지도
+presentation/week7_presentation.html: 음식점 JOIN·마커·범위
+presentation/week8_presentation.html: 거리 계산·가상 기준·제공 캡처
+
+운영 DB의 실제 컬럼 타입·FK 적용과 등록 데이터 수는 미검증.
+보존 대상 원본 해시 목록(보고서 작성 전 기준):
+87eed72e21a54f4a1cfbbf4d2ed4f363aa3fdb9f33fdb5bd6bc493baeef4b974  app.py
+d1279e976e9e7158b95d4f0072070b9eadfbe766ae7064d0c0c78412f48c6276  memo.txt
+2665d8d0dbcb546a79dbae9f2bb4d726d18406d3d0ed76fd6952cb010d878f47  README.md
+95517753ff409b8993f26594fec060aff74a891f26520575f0f8dd3b69d5d1e1  DB\add menus.sql
+d4ccc08f6c0ff3199f84db86aef8aef1c391d3c04d6e9c35a1256121301361b6  DB\address.sql
+de2900c2ffdc19bce3eca562d96c4ad8c7e64eded401fad314ca08791971380d  DB\restaurant_query.sql
+de500893c1ad69790828573111e4be319d125010eb625ba9f6e383b28b80c24f  DB\schema.sql
+ca349ffdc3665eb0e0fdc034370c894c61e6923b5f420be5289086a4bcf866e9  presentation\README.md
+19e67d2a237f9347c795f18f4bb4d93687943479a3ecf855a15eb02f0dba2e2d  presentation\week4_presentation.html
+3f27b2264efc0b7d376595e1cca088eda9f8ee2206e8f57090679ec2c51170a1  presentation\week5_presentation.html
+4a1e084ce593d579d4aa344ecf880d9642367f1f05597ff9b9b7ca927174149b  presentation\week7_presentation.html
+19532ff94b6601c874f620ecd10b0ef56db410d4a6a1bea1bfc192d5ba7e5dcf  presentation\week8_presentation.html
+70660d4d306cc2adcbf43cab9bf8eca8f36666cfdf0699a0b17ab9b6babe79f2  templates\address.html
+6cdb60a96d30f0ecef0625b01744e0212e2db701740d505d576426f76d63304d  templates\cart.html
+3d24a6621599b0723e860438a2fdd9298d5ae6cbdeb9285b8243f9735d920e5d  templates\delivery_status.html
+edf9fc07e618668a0f68442cefa93ccba1e0ce4ffb0b3390748c2824f1d74534  templates\index.html
+af5a62f5eb36afeb017f2babc54da9e8ce08b05de6abc4a094b220214acd9f09  templates\login.html
+492657352345434bde24c0bbe062e4455751c995337954d88e1a376594003841  templates\orders.html
+abf4ed7197b7340adf0a5bffdf55f83fdfb876f7cb6085541dd9c9b14dc86aa3  templates\order_complete.html
+b53cdb1b570f36d66878dd7412c35921d8ee90505b1a698c9e06f32de4c72177  templates\order_detail.html
+69529b4ce121f49257a51e9ad97743d58444d1a428121d49b997d604fedbe538  templates\restaurant.html
+418ba9e62c09453289a16b17956b8a74724e5d4f5e3dae3a459433f5576c477d  templates\saving.html
+677c8689bcd999547d8c02cfcf701b863ecb5c9f797379d73eddd66c1dc47135  templates\signup.html

@@ -545,17 +545,32 @@ def delivery_status(order_id):
 
     order = cursor.fetchone()
 
+    if not order:
+        cursor.close()
+        connection.close()
+        return redirect("/orders")
+
+    cursor.execute("""
+        SELECT DISTINCT r.name, r.address
+        FROM order_items oi
+        JOIN menus m ON oi.menu_id = m.id
+        JOIN restaurants r ON m.restaurant_id = r.id
+        WHERE oi.order_id = %s
+          AND r.address IS NOT NULL
+          AND TRIM(r.address) <> ''
+    """, (order_id,))
+
+    restaurants = cursor.fetchall()
+
     cursor.close()
     connection.close()
-
-    if not order:
-        return redirect("/orders")
 
     kakao_javascript_key = os.getenv("KAKAO_JAVASCRIPT_KEY")
 
     return render_template(
         "delivery_status.html",
         order=order,
+        restaurants=restaurants,
         kakao_javascript_key=kakao_javascript_key
     )
 
