@@ -1,7 +1,0 @@
-flowchart LR
- B[브라우저: Jinja 결과 HTML 및 JavaScript] -->|HTTP| F[Flask app.py]
- F -->|SQL| DB[(MySQL: 5개 테이블)]
- DB -->|조회 결과| F
- F -->|HTML 응답| B
- B -->|주소 검색| K[Kakao Maps SDK 및 Geocoder]
- K -->|좌표와 지도| B
