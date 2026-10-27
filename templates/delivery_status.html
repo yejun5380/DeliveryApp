@@ -7,7 +7,6 @@
 </head>
 
 <body>
-
     <h1>가상 배달현황</h1>
 
     <p>주문번호: #{{ order[0] }}</p>
@@ -22,25 +21,30 @@
     <hr>
 
     <h2>배달 위치 및 음식점 위치</h2>
-    <p>지도에서 핀을 클릭하면 위치 정보를 확인할 수 있습니다.</p>
+    <p>지도에서 마커를 클릭하면 위치를 확인할 수 있습니다.</p>
+    <p>※ 배달기사 이동은 실제 도로가 아닌 직선 경로를 이용한 가상 시뮬레이션입니다.</p>
 
     <div id="map" style="width:100%; height:400px;"></div>
+
     <h3>음식점별 배달 거리</h3>
     <p>※ 실제 도로 이동거리가 아닌 좌표 기준 직선거리입니다.</p>
     <ul id="distance-list">
         <li>거리 계산 중...</li>
     </ul>
 
-    <script type="text/javascript"
-        src="//dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_javascript_key }}&libraries=services">
-        </script>
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_javascript_key }}&libraries=services"></script>
 
     <script>
         const deliveryAddress = {{ order[2] | tojson }};
         const restaurants = {{ restaurants | tojson }};
+        const roadPath = {{ road_path | tojson }};
+        const roadDistance = {{ road_distance | tojson }};
+        const roadDuration = {{ road_duration | tojson }};
+        const routeError = {{ route_error | tojson }};
+
+        const orderTime = new Date({{ order[1].strftime('%Y-%m-%dT%H:%M:%S') | tojson }});
 
         const mapContainer = document.getElementById("map");
-
         const map = new kakao.maps.Map(mapContainer, {
             center: new kakao.maps.LatLng(37.4506, 126.6570),
             level: 3
@@ -49,16 +53,17 @@
         const geocoder = new kakao.maps.services.Geocoder();
         const bounds = new kakao.maps.LatLngBounds();
 
-        let successCount = 0;
-        let completedCount = 0;
-        const totalCount = restaurants.length + 1;
-
         let deliveryCoords = null;
         const restaurantCoords = [];
+        let riderMarker = null;
+        let riderRoute = null;
+
+        let completedCount = 0;
+        let successCount = 0;
+        const totalCount = restaurants.length + 1;
 
         function calculateDistance(start, end) {
             const R = 6371;
-
             const lat1 = start.getLat() * Math.PI / 180;
             const lat2 = end.getLat() * Math.PI / 180;
             const dLat = (end.getLat() - start.getLat()) * Math.PI / 180;
@@ -69,30 +74,26 @@
                 Math.cos(lat1) * Math.cos(lat2) *
                 Math.sin(dLon / 2) ** 2;
 
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-            return R * c;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
 
         function displayDistances() {
-            const distanceList = document.getElementById("distance-list");
-            distanceList.innerHTML = "";
+            const list = document.getElementById("distance-list");
+            list.innerHTML = "";
 
             if (!deliveryCoords) {
-                const item = document.createElement("li");
-                item.textContent = "배달 주소 좌표를 확인할 수 없습니다.";
-                distanceList.appendChild(item);
+                const li = document.createElement("li");
+                li.textContent = "배달 주소 좌표를 확인할 수 없습니다.";
+                list.appendChild(li);
                 return;
             }
 
             if (restaurantCoords.length === 0) {
-                const item = document.createElement("li");
-                item.textContent = "주소가 등록된 음식점이 없습니다.";
-                distanceList.appendChild(item);
+                const li = document.createElement("li");
+                li.textContent = "음식점 위치를 확인할 수 없습니다.";
+                list.appendChild(li);
                 return;
             }
-
-            const MAX_DELIVERY_DISTANCE = 5;
 
             restaurantCoords.forEach(function (restaurant) {
                 const distance = calculateDistance(
@@ -100,21 +101,154 @@
                     deliveryCoords
                 );
 
-                const isDeliverable = distance <= MAX_DELIVERY_DISTANCE;
-
-                const deliveryStatus = isDeliverable
-                    ? "가상 배달 가능"
-                    : "가상 배달 범위 초과";
-
-                const item = document.createElement("li");
-
-                item.textContent =
+                const li = document.createElement("li");
+                li.textContent =
                     restaurant.name + " → " +
                     distance.toFixed(2) + "km / " +
-                    deliveryStatus;
+                    (distance <= 5 ? "가상 배달 가능" : "가상 배달 범위 초과");
 
-                distanceList.appendChild(item);
+                list.appendChild(li);
             });
+        }
+
+        function getElapsedSeconds() {
+            return Math.max(
+                0,
+                (Date.now() - orderTime.getTime()) / 1000
+            );
+        }
+
+        function updateDeliveryStatus() {
+            const elapsed = getElapsedSeconds();
+            const status = document.getElementById("delivery-status");
+            const message = document.getElementById("delivery-message");
+
+            if (elapsed < 20) {
+                status.textContent = "주문 접수";
+                message.textContent = "음식점에서 주문을 확인하고 있습니다.";
+            } else if (elapsed < 40) {
+                status.textContent = "음식 준비중";
+                message.textContent = "음식점에서 음식을 준비하고 있습니다.";
+            } else if (elapsed < 60) {
+                status.textContent = "배달기사 배정";
+                message.textContent = "배달기사가 음식점으로 이동하고 있습니다.";
+            } else if (elapsed < 80) {
+                status.textContent = "배달중";
+                message.textContent = "배달기사가 배달 주소로 이동하고 있습니다.";
+            } else {
+                status.textContent = "가상 배달 완료";
+                message.textContent = "가상 배달이 완료되었습니다.";
+            }
+
+            updateRiderPosition(elapsed);
+        }
+
+        
+function updateRiderPosition(elapsed) {
+    if (!riderMarker || !deliveryCoords || restaurantCoords.length === 0) {
+        return;
+    }
+
+    const start = restaurantCoords[0].coords;
+    const end = deliveryCoords;
+
+    const points = roadPath.length >= 2
+        ? roadPath.map(point => new kakao.maps.LatLng(point.lat, point.lng))
+        : [start, end];
+
+    // 주문 후 60~80초 사이에 이동
+    let progress = 0;
+
+    if (elapsed >= 60 && elapsed < 80) {
+        progress = (elapsed - 60) / 20;
+    } else if (elapsed >= 80) {
+        progress = 1;
+    }
+
+    // 경로 구간별 거리를 계산해 전체 거리 기준으로 이동
+    const segmentLengths = [];
+    let totalLength = 0;
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const length = calculateDistance(points[i], points[i + 1]);
+        segmentLengths.push(length);
+        totalLength += length;
+    }
+
+    let remaining = totalLength * progress;
+    let position = points[points.length - 1];
+
+    for (let i = 0; i < segmentLengths.length; i++) {
+        const segment = segmentLengths[i];
+
+        if (remaining <= segment) {
+            const ratio = segment === 0 ? 0 : remaining / segment;
+
+            const lat = points[i].getLat() +
+                (points[i + 1].getLat() - points[i].getLat()) * ratio;
+
+            const lng = points[i].getLng() +
+                (points[i + 1].getLng() - points[i].getLng()) * ratio;
+
+            position = new kakao.maps.LatLng(lat, lng);
+            break;
+        }
+
+        remaining -= segment;
+    }
+
+    riderMarker.setPosition(position);
+    riderMarker.setMap(elapsed >= 40 ? map : null);
+}
+
+
+        function initializeRider() {
+            if (!deliveryCoords || restaurantCoords.length === 0) {
+                return;
+            }
+
+            const start = restaurantCoords[0].coords;
+
+            const riderContent = document.createElement("div");
+            riderContent.textContent = "🛵";
+            riderContent.style.fontSize = "30px";
+            riderContent.style.textAlign = "center";
+
+            riderMarker = new kakao.maps.CustomOverlay({
+                position: start,
+                content: riderContent,
+                yAnchor: 1,
+                zIndex: 10
+            });
+
+            const routePoints = roadPath.map(function (point) {
+                return new kakao.maps.LatLng(point.lat, point.lng);
+            });
+
+            riderRoute = new kakao.maps.Polyline({
+                map: map,
+                path: routePoints.length >= 2
+                    ? routePoints
+                    : [start, deliveryCoords],
+                strokeWeight: 5,
+                strokeColor: "#3366FF",
+                strokeOpacity: 0.85,
+                strokeStyle: "solid"
+            });
+
+            if (routePoints.length >= 2) {
+                routePoints.forEach(function (point) {
+                    bounds.extend(point);
+                });
+                map.setBounds(bounds);
+            }
+
+            console.log("도로 경로 좌표 수:", routePoints.length);
+            console.log("도로 거리(m):", roadDistance);
+            console.log("예상 소요시간(초):", roadDuration);
+            console.log("경로 오류:", routeError);
+
+            updateRiderPosition(getElapsedSeconds());
         }
 
         function searchCompleted() {
@@ -126,29 +260,32 @@
                 }
 
                 displayDistances();
+                initializeRider();
+                updateDeliveryStatus();
             }
         }
 
         geocoder.addressSearch(deliveryAddress, function (result, status) {
             if (status === kakao.maps.services.Status.OK) {
-                const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
-
-                deliveryCoords = coords;
+                deliveryCoords = new kakao.maps.LatLng(
+                    result[0].y,
+                    result[0].x
+                );
 
                 const marker = new kakao.maps.Marker({
                     map: map,
-                    position: coords
+                    position: deliveryCoords
                 });
 
-                const infoWindow = new kakao.maps.InfoWindow({
+                const info = new kakao.maps.InfoWindow({
                     content: '<div style="padding:5px;">배달 주소</div>'
                 });
 
                 kakao.maps.event.addListener(marker, "click", function () {
-                    infoWindow.open(map, marker);
+                    info.open(map, marker);
                 });
 
-                bounds.extend(coords);
+                bounds.extend(deliveryCoords);
                 successCount++;
             }
 
@@ -156,15 +293,18 @@
         });
 
         restaurants.forEach(function (restaurant) {
-            const restaurantName = restaurant[0];
-            const restaurantAddress = restaurant[1];
+            const name = restaurant[0];
+            const address = restaurant[1];
 
-            geocoder.addressSearch(restaurantAddress, function (result, status) {
+            geocoder.addressSearch(address, function (result, status) {
                 if (status === kakao.maps.services.Status.OK) {
-                    const coords = new kakao.maps.LatLng(result[0].y, result[0].x);
+                    const coords = new kakao.maps.LatLng(
+                        result[0].y,
+                        result[0].x
+                    );
 
                     restaurantCoords.push({
-                        name: restaurantName,
+                        name: name,
                         coords: coords
                     });
 
@@ -175,14 +315,14 @@
 
                     const nameElement = document.createElement("div");
                     nameElement.style.padding = "5px";
-                    nameElement.textContent = restaurantName;
+                    nameElement.textContent = name;
 
-                    const infoWindow = new kakao.maps.InfoWindow({
+                    const info = new kakao.maps.InfoWindow({
                         content: nameElement
                     });
 
                     kakao.maps.event.addListener(marker, "click", function () {
-                        infoWindow.open(map, marker);
+                        info.open(map, marker);
                     });
 
                     bounds.extend(coords);
@@ -192,45 +332,15 @@
                 searchCompleted();
             });
         });
+
+        updateDeliveryStatus();
+        setInterval(updateDeliveryStatus, 1000);
     </script>
 
     <hr>
 
     <a href="/orders/{{ order[0] }}">주문 상세보기</a>
     <a href="/orders">주문내역</a>
-
-    <script>
-        const orderTime = new Date("{{ order[1].strftime('%Y-%m-%dT%H:%M:%S') }}");
-
-        function updateDeliveryStatus() {
-            const now = new Date();
-            const elapsedSeconds = Math.floor((now - orderTime) / 1000);
-
-            const statusElement = document.getElementById("delivery-status");
-            const messageElement = document.getElementById("delivery-message");
-
-            if (elapsedSeconds < 20) {
-                statusElement.innerText = "주문 접수";
-                messageElement.innerText = "음식점에서 주문을 확인하고 있습니다.";
-            } else if (elapsedSeconds < 40) {
-                statusElement.innerText = "음식 준비중";
-                messageElement.innerText = "음식점에서 음식을 준비하고 있습니다.";
-            } else if (elapsedSeconds < 60) {
-                statusElement.innerText = "배달기사 배정";
-                messageElement.innerText = "배달기사가 음식점으로 이동하고 있습니다.";
-            } else if (elapsedSeconds < 80) {
-                statusElement.innerText = "배달중";
-                messageElement.innerText = "배달기사가 배달 주소로 이동하고 있습니다.";
-            } else {
-                statusElement.innerText = "가상 배달 완료";
-                messageElement.innerText = "가상 배달이 완료되었습니다.";
-            }
-        }
-
-        updateDeliveryStatus();
-        setInterval(updateDeliveryStatus, 1000);
-    </script>
-
 </body>
 
 </html>
