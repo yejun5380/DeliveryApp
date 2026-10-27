@@ -5,6 +5,8 @@
 
 [▶ 5주차 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/presentation/week5_presentation.html)
 
+[▶ 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/presentation/TotalWeek_presentation.html)
+
 [▶ 7주차 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/presentation/week7_presentation.html)
 
 [▶ 8주차 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/presentation/week8_presentation.html)
