@@ -85,6 +85,8 @@ CREATE TABLE orders (
     total_price INT NOT NULL,
     total_calories INT NOT NULL,
     delivery_address VARCHAR(255),
+    delivery_snapshot LONGTEXT NULL,
+    request_token CHAR(64) NULL UNIQUE,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 

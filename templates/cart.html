@@ -92,6 +92,7 @@
 
     <header>
         <h1>장바구니</h1>
+        <p>실제 제휴·주문·결제가 없는 가상 서비스입니다. 실제 지점은 위치 안내에만 사용합니다.</p>
     </header>
 
     <main class="cart-list">
@@ -105,6 +106,12 @@
         <div class="menu">
 
             <h2>{{ item[0][1] }}</h2>
+            {% if item[3] %}
+            <p>위치 안내: {{ item[3].display_name }}</p>
+            <p>{{ item[3].address }}</p>
+            {% endif %}
+            {% if item[4] %}<p role="alert">{{ item[4] }}</p>{% endif %}
+            <a href="{{ url_for('restaurant_detail', restaurant_id=item[0][4], reselect=item[2]) }}">지점 선택·변경 (수량 유지)</a>
 
             <div class="price">
                 {{ "{:,}".format(item[0][2]) }}원
@@ -117,19 +124,19 @@
             <div class="quantity">
 
                 <form action="/cart/minus" method="POST">
-                    <input type="hidden" name="menu_id" value="{{ item[0][0] }}">
+                    <input type="hidden" name="cart_key" value="{{ item[2] }}">
                     <button type="submit">−</button>
                 </form>
 
                 <span>{{ item[1] }}</span>
 
                 <form action="/cart/add" method="POST">
-                    <input type="hidden" name="menu_id" value="{{ item[0][0] }}">
-                    <button type="submit">+</button>
+                    <input type="hidden" name="cart_key" value="{{ item[2] }}">
+                    <button type="submit" {% if item[4] %}disabled{% endif %}>+</button>
                 </form>
 
                 <form action="/cart/delete" method="POST">
-                    <input type="hidden" name="menu_id" value="{{ item[0][0] }}">
+                    <input type="hidden" name="cart_key" value="{{ item[2] }}">
                     <button class="delete" type="submit">삭제</button>
                 </form>
 
@@ -161,8 +168,14 @@
                 <strong>{{ "{:,}".format(total_calories.value) }} kcal</strong>
             </p>
 
-            <form action="/order" method="POST">
-                <button class="order-button" type="submit">
+            <p><a href="/address">배달 주소 확인 / 변경</a></p>
+            <p>선택한 모든 지점의 실제 도로거리 {{ distance_policy.limit_meters_label }} 이하일 때만 가상 주문할 수 있습니다.</p>
+            <button type="button" id="check-delivery">배달 가능 여부 확인</button>
+            <div id="delivery-check-result" role="status" aria-live="polite">주문 전 배달 가능 여부를 확인해 주세요.</div>
+            <form action="/order" method="POST" id="order-form">
+                <input type="hidden" name="order_token" value="{{ order_token }}">
+                <input type="hidden" name="fingerprint" id="fingerprint">
+                <button class="order-button" id="order-button" type="submit" disabled>
                     주문하기
                 </button>
             </form>
@@ -189,6 +202,7 @@
 
     </main>
 
+<script src="{{ url_for('static', filename='cart.js') }}"></script>
 </body>
 
 </html>

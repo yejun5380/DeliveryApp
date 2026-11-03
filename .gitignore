@@ -1,4 +1,20 @@
 .env
-__pycache__//submission/
+__pycache__/
+/submission/
 /backups/
 /submission/
+
+.venv/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python cache
+*.pyc
+.pytest_cache/
+
+# Test coverage
+htmlcov/
+.coverageF

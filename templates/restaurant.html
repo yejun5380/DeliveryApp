@@ -69,11 +69,31 @@
         </a>
 
         <h2>{{ restaurant[1] }}</h2>
+        {% if restaurant[4] %}<img src="{{ restaurant[4] }}" alt="{{ restaurant[1] }} 가상 이미지" style="max-width:240px">{% endif %}
         <p>{{ restaurant[2] }}</p>
         <p>{{ restaurant[3] }}</p>
     </header>
 
     <main class="menu-list">
+        <p>가상 주문·절약 체험 서비스입니다. 실제 음식점과 제휴하거나 주문·결제하지 않습니다.
+        메뉴·가격·칼로리·이미지는 가상 음식점 데이터이며, 실제 지점 정보는 위치 안내에만 사용합니다.</p>
+        <section id="branch-picker" data-url="/restaurant/{{ restaurant[0] }}/branches">
+            <h2>배달 주소 주변 지점 선택</h2>
+            <p>검색 반경은 직선거리 {{ distance_policy.limit_label }}입니다.
+            최종 배달 가능 여부는 실제 자동차 도로거리 {{ distance_policy.limit_meters_label }} 이하 기준으로 별도 확인합니다.</p>
+            <a href="/address">회원 배달 주소 확인·변경</a>
+            <button type="button" id="search-branches">주변 지점 검색</button>
+            <p id="branch-message" role="status" aria-live="polite">검색 버튼을 눌러 지점을 선택해 주세요.</p>
+            <div id="branch-list"></div>
+            <button type="button" id="more-branches" hidden>지점 더 보기</button>
+            {% if reselect_key %}
+            <form action="/cart/reselect" method="POST" class="branch-cart-form">
+                <input type="hidden" name="cart_key" value="{{ reselect_key }}">
+                <input type="hidden" name="selection_token" class="selection-token">
+                <button type="submit" class="branch-submit" disabled>기존 항목의 수량을 유지하고 선택 지점으로 변경</button>
+            </form>
+            {% endif %}
+        </section>
 
         <h2>메뉴</h2>
 
@@ -82,6 +102,7 @@
         <div class="menu">
 
             <h3>{{ menu[1] }}</h3>
+            {% if menu[5] %}<img src="{{ menu[5] }}" alt="{{ menu[1] }} 가상 메뉴 이미지" style="max-width:200px">{% endif %}
 
             <p>
                 {{ menu[4] }}
@@ -95,10 +116,13 @@
                 {{ "{:,}".format(menu[3]) }} kcal
             </div>
 
-            <form action="/cart/add" method="POST">
+            {% if not reselect_key %}
+            <form action="/cart/add" method="POST" class="branch-cart-form">
+                <input type="hidden" name="selection_token" class="selection-token">
                 <input type="hidden" name="menu_id" value="{{ menu[0] }}">
-                <button type="submit">장바구니 담기</button>
+                <button type="submit" class="branch-submit" disabled>선택 지점의 가상 메뉴 담기</button>
             </form>
+            {% endif %}
 
         </div>
 
@@ -106,6 +130,7 @@
 
     </main>
 
+<script src="{{ url_for('static', filename='branches.js') }}"></script>
 </body>
 
 </html>
