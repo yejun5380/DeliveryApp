@@ -15,4 +15,4 @@
 
 [▶ 10주차 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/presentation/week10_presentation.html)
 
-[▶ 11주차 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/week11_presentation.html)
+[▶ 11주차 발표 화면 열기](https://yejun5380.github.io/DeliveryApp/presentation/week11_presentation.html)
