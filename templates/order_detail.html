@@ -1,17 +1,13 @@
-<!DOCTYPE html>
-<html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <title>주문 상세 - DeliveryApp</title>
-</head>
-
-<body>
+{% extends 'app_shell.html' %}
+{% block title %}주문 상세 - DeliveryApp{% endblock %}
+{% block content %}
 
     <p>실제 음식점과 제휴하거나 주문·결제하지 않는 가상 서비스입니다.</p>
     <h1>주문 #{{ order[0] }} 상세내역</h1>
 
     <p>주문 날짜: {{ order[1] }}</p>
+    {% include 'order_cancel.html' %}
+    {% include 'order_reorder.html' %}
 
     {% if order[4] %}
     <p>배달 주소: {{ order[4] }}</p>
@@ -72,6 +68,4 @@
         주문내역으로 돌아가기
     </a>
 
-</body>
-
-</html>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% if order[5] == 'cancelled' %}
+<p>주문 상태: 취소됨</p>
+{% if order[6] %}<p>취소 일시: {{ order[6] }}</p>{% endif %}
+{% elif order[5] == 'active' %}
+<p>주문 상태: 정상</p>
+{% else %}
+<p>주문 상태: 확인 불가</p>
+{% endif %}
+{% if order[0] in cancellable %}
+<form method="post" action="{{ url_for('cancel_order', order_id=order[0]) }}"
+      onsubmit="return confirm('이 주문을 취소하시겠습니까?');">
+    <input type="hidden" name="cancel_token" value="{{ cancel_token }}">
+    <button type="submit">주문 취소</button>
+</form>
+{% endif %}

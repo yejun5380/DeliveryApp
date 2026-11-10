@@ -1,0 +1,5 @@
+<form method="post" action="{{ url_for('reorder', order_id=order[0]) }}">
+    <input type="hidden" name="cancel_token" value="{{ cancel_token }}">
+    <input type="hidden" name="cart_revision" value="{{ cart_revision }}">
+    <button type="submit">재주문</button>
+</form>

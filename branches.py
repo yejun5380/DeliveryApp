@@ -92,8 +92,9 @@ def meters_between(a, b):
     return 6371000 * 2 * math.asin(math.sqrt(min(1, value)))
 
 
-def mapping_for(cursor, restaurant_id):
-    cursor.execute("SELECT brand_name, aliases FROM restaurant_brand_mappings WHERE restaurant_id=%s AND enabled=1", (restaurant_id,))
+def mapping_for(cursor, restaurant_id, lock=False):
+    cursor.execute("SELECT brand_name, aliases FROM restaurant_brand_mappings WHERE restaurant_id=%s AND enabled=1"
+                   + (" FOR SHARE" if lock else ""), (restaurant_id,))
     row = cursor.fetchone()
     if not row:
         raise DeliveryError("브랜드 연결이 없거나 비활성화되어 있습니다.")
@@ -106,7 +107,7 @@ def mapping_for(cursor, restaurant_id):
     return row[0], list(dict.fromkeys([row[0], *aliases]))
 
 
-def search_places(address, brand, aliases, page=1):
+def search_places(address, brand, aliases, page=1, fresh=False):
     center = coordinate_cache.get(address, lambda: address_to_coords(address))
 
     def fetch():
@@ -150,7 +151,26 @@ def search_places(address, brand, aliases, page=1):
         except (KeyError, TypeError, ValueError):
             raise DeliveryError("장소 검색 응답을 처리할 수 없습니다.") from None
 
+    if fresh:
+        return fetch()
     return search_cache.get((address, brand, tuple(aliases), page, DELIVERY_LIMIT_METERS), fetch)
+
+
+def find_reorder_places(address, brand, aliases, place_ids):
+    remaining = set(place_ids)
+    found = {}
+    for page in range(1, 46):
+        result = search_places(address, brand, aliases, page, fresh=True)
+        for place in result["places"]:
+            place_id = place["place_id"]
+            if place_id in remaining:
+                found[place_id] = place
+                remaining.remove(place_id)
+        if not remaining:
+            return found
+        if result["is_end"]:
+            break
+    raise DeliveryError("현재 배달 주소 주변에서 이전 주문의 지점을 찾을 수 없습니다. 음식점에서 지점을 다시 선택해 주세요.")
 
 
 def save_places(cursor, restaurant_id, places):

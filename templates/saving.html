@@ -1,26 +1,18 @@
-<!DOCTYPE html>
-<html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <title>절약 통계 - DeliveryApp</title>
-</head>
-
-<body>
+{% extends 'app_shell.html' %}
+{% block title %}절약 통계 - DeliveryApp{% endblock %}
+{% block content %}
 
     <h1>절약 통계</h1>
+    <p>절약 통계는 배달 진행 중인 주문을 포함해 취소되지 않은 주문을 집계합니다.
+        저금통 잔액에는 배달 완료 후 적립된 가상 포인트가 반영됩니다.</p>
+    <p><a href="{{ url_for('wallet_page') }}">가상 저금통 보기</a></p>
 
     {% if saving_data[0] > 0 %}
-
-    <h2>총 가상 주문</h2>
-    <p>{{ saving_data[0] }}회</p>
-
-    <h2>총 절약 금액</h2>
-    <p>{{ "{:,}".format(saving_data[1]) }}원</p>
-
-    <h2>총 절약 칼로리</h2>
-    <p>{{ "{:,}".format(saving_data[2]) }} kcal</p>
-
+    <div class="saving-summary">
+        <section class="app-card"><h2>총 가상 주문</h2><p>{{ saving_data[0] }}회</p></section>
+        <section class="app-card"><h2>총 절약 금액</h2><p>{{ "{:,}".format(saving_data[1]) }}원</p></section>
+        <section class="app-card"><h2>총 절약 칼로리</h2><p>{{ "{:,}".format(saving_data[2]) }} kcal</p></section>
+    </div>
     <a href="/orders">주문(절약)내역 보기</a>
 
     {% else %}
@@ -32,10 +24,42 @@
 
     {% endif %}
 
+    <section class="app-card app-section saving-chart" aria-labelledby="saving-chart-title">
+        <h2 id="saving-chart-title">최근 절약 금액</h2>
+        <p>그래프는 최근 기간만 집계하므로 전체 누적 절약 금액과 다를 수 있습니다.</p>
+        {% set periods = [('daily', '일별', '최근 7일'), ('weekly', '주별', '최근 8주'),
+                          ('monthly', '월별', '최근 12개월')] %}
+        <div class="saving-periods" role="group" aria-label="그래프 기간" hidden>
+            {% for key, label, _ in periods %}
+            <button type="button" aria-pressed="{{ 'true' if loop.first else 'false' }}"
+                    aria-controls="saving-{{ key }}">{{ label }}</button>
+            {% endfor %}
+        </div>
+        {% for key, label, range_label in periods %}
+        {% set period = saving_periods[key] %}
+        <section class="saving-period" id="saving-{{ key }}" aria-labelledby="saving-{{ key }}-title">
+            <h3 id="saving-{{ key }}-title">{{ label }} · {{ range_label }}</h3>
+            <p>기간 합계 <strong>{{ "{:,}".format(period.total) }}원</strong></p>
+            {% if not period.has_amount %}<p>이 기간에 표시할 절약 금액이 없습니다.</p>{% endif %}
+            <ol class="saving-bars" aria-label="{{ label }} 절약 금액">
+                {% for row in period.rows %}
+                <li>
+                    <span>{{ row.label }}</span>
+                    <strong>{{ "{:,}".format(row.amount) }}원</strong>
+                    <span class="saving-track" aria-hidden="true">
+                        <span{% if row.amount < 0 %} class="saving-negative"{% endif %}
+                              style="width: {{ row.width }}%"></span>
+                    </span>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+        {% endfor %}
+    </section>
+    <script src="{{ url_for('static', filename='saving.js') }}" defer></script>
+
     <p>
         <a href="/">← 홈으로</a>
     </p>
 
-</body>
-
-</html>
+{% endblock %}

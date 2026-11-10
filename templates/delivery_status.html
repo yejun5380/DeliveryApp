@@ -10,6 +10,10 @@
     <h1>가상 배달현황</h1>
     <p>주문번호 #{{ order[0] }} / 주문시간 {{ order[1] }}</p>
     <p>배달 주소: {{ order[2] }}</p>
+    {% if cancelled %}
+    <h2 id="delivery-status">취소된 주문입니다.</h2>
+    {% if order[6] %}<p>취소 일시: {{ order[6] }}</p>{% endif %}
+    {% else %}
     <h2 id="delivery-status">{{ route_error or '배달 상태 확인 중...' }}</h2>
     <p id="delivery-message" role="status"></p>
     <progress id="progress" max="1" value="0"></progress>
@@ -26,6 +30,9 @@
     <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_javascript_key|urlencode }}"></script>{% endif %}
     <script id="delivery-data" type="application/json">{{ {'snapshot': snapshot, 'elapsed': elapsed}|tojson }}</script>
     <script src="{{ url_for('static', filename='delivery.js') }}"></script>
+    {% endif %}
+    {% if wallet_error %}<p role="status">{{ wallet_error }}</p>{% endif %}
+    <p><a href="{{ url_for('wallet_page') }}">가상 저금통 보기</a></p>
     <a href="/orders/{{ order[0] }}">주문 상세보기</a> <a href="/orders">주문내역</a>
 </body>
 

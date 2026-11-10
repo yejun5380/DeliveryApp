@@ -1,0 +1,38 @@
+{% extends 'app_shell.html' %}
+{% block title %}가상 저금통 - DeliveryApp{% endblock %}
+{% block content %}
+    <h1>가상 저금통</h1>
+    <p>가상 배달이 완료된 주문은 주문 금액만큼 포인트가 적립됩니다.
+        배달 완료 후 저금통이나 해당 주문의 배달현황을 열면 적립이 반영됩니다.</p>
+    <p class="service-note">포인트는 서비스 안에서 사용하는 가상 포인트이며, 현금으로 인출하거나 환급받을 수 없습니다.</p>
+    {% if wallet_error %}
+    <p class="app-card" role="alert">{{ wallet_error }}</p>
+    {% else %}
+    <div class="wallet-summary">
+        <section class="app-card wallet-balance">
+            <h2>현재 잔액</h2>
+            <p class="points">{{ "{:,}".format(balance) }} 포인트</p>
+        </section>
+        <section class="app-card">
+            <h2>총 적립 포인트</h2>
+            <p class="points">{{ "{:,}".format(total_earned) }} 포인트</p>
+        </section>
+    </div>
+    <section class="app-card" aria-labelledby="history-title">
+        <h2 id="history-title">적립 내역</h2>
+        {% if transactions %}
+        <ul class="wallet-history">
+            {% for order_id, amount, created_at in transactions %}
+            <li>
+                <a href="{{ url_for('order_detail', order_id=order_id) }}">주문 #{{ order_id }}</a>
+                <strong>{{ "{:,}".format(amount) }} 포인트</strong>
+                <time datetime="{{ created_at|string|replace(' ', 'T') }}">적립 일시 {{ created_at }}</time>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>아직 적립된 주문이 없습니다.</p>
+        {% endif %}
+    </section>
+    {% endif %}
+{% endblock %}

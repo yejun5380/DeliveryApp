@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>{% block title %}DeliveryApp{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app_shell.css') }}">
+</head>
+<body class="app-shell">
+    <a class="skip-link" href="#main-content">본문으로 건너뛰기</a>
+    <header class="app-header">
+        <div class="app-container header-inner">
+            <a class="app-brand" href="{{ url_for('home') }}">DeliveryApp</a>
+            {% include 'app_nav.html' %}
+            <div class="account-links">
+                {% if session.get('user_id') %}
+                <a href="{{ url_for('cart') }}">장바구니</a>
+                <a href="{{ url_for('logout') }}">로그아웃</a>
+                {% else %}
+                <a href="{{ url_for('login') }}">로그인</a>
+                <a href="{{ url_for('signup') }}">회원가입</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+    <main id="main-content" class="app-container app-content" tabindex="-1">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

@@ -1,0 +1,15 @@
+<nav class="app-nav" aria-label="주요 메뉴">
+    {% set tabs = [
+        ('home', '홈', ('home',), 'M3 10l9-7 9 7v10h-6v-6H9v6H3z'),
+        ('orders', '주문내역', ('orders', 'order_detail'), 'M6 3h12v18l-3-2-3 2-3-2-3 2z M9 8h6m-6 4h6'),
+        ('saving', '절약 통계', ('saving',), 'M4 4v16h16M8 16v-4m5 4V9m5 7V6'),
+        ('wallet_page', '가상 저금통', ('wallet_page',), 'M19 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h13v-4m0-8h-4a4 4 0 0 0 0 8h4a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1z M15 12h.01')
+    ] %}
+    {% for endpoint, label, active_pages, path in tabs %}
+    <a href="{{ url_for(endpoint) }}"{% if request.endpoint in active_pages %} aria-current="{{ 'page' if request.endpoint == endpoint else 'true' }}"{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{ path }}"/></svg>
+        <span>{{ label }}</span>
+    </a>
+    {% endfor %}
+</nav>

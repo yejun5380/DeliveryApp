@@ -81,7 +81,7 @@ class CheckoutTests(unittest.TestCase):
         self.connection.rollback.assert_called_once()
 
     def test_legacy_order_preserved_without_fake_progress_or_api(self):
-        self.cursor.fetchone.return_value = (7, datetime(2026,1,1), 'address', None, 100)
+        self.cursor.fetchone.return_value = (7, datetime(2026,1,1), 'address', None, 100, 'active', None)
         with patch('app.inspect_delivery') as check:
             response = self.client.get('/delivery/7')
             check.assert_not_called()
@@ -103,10 +103,11 @@ class CheckoutTests(unittest.TestCase):
         self.connection.cursor.assert_not_called()
 
     def test_order_detail_and_statistics_still_render(self):
-        self.cursor.fetchone.return_value = (7, datetime(2026,1,1), 100, 20, 'address')
+        self.cursor.fetchone.return_value = (7, datetime(2026,1,1), 100, 20, 'address', 'active', None, None, 100)
         self.cursor.fetchall.return_value = [('menu',1,100,20,'A')]
         self.assertEqual(self.client.get('/orders/7').status_code, 200)
-        self.cursor.fetchone.return_value = (1,100,20)
+        self.cursor.fetchone.side_effect = [(datetime(2026,1,1),), (1,100,20)]
+        self.cursor.fetchall.return_value = []
         self.assertEqual(self.client.get('/saving').status_code, 200)
 
 

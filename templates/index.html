@@ -1,118 +1,52 @@
-<!DOCTYPE html>
-<html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <title>DeliveryApp</title>
-
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f7f7f7;
-        }
-
-        header {
-            background-color: white;
-            padding: 20px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        header h1 {
-            margin: 0;
-        }
-
-        .search {
-            margin-top: 15px;
-            width: 100%;
-            box-sizing: border-box;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: 16px;
-        }
-
-        .restaurant-list {
-            padding: 20px;
-        }
-
-        .restaurant {
-            display: block;
-            background-color: white;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 15px;
-            cursor: pointer;
-            text-decoration: none;
-            color: black;
-        }
-
-        .restaurant h2 {
-            margin-top: 0;
-        }
-
-        .category {
-            color: #777;
-        }
-
-        .description {
-            color: #555;
-        }
-    </style>
-</head>
-
-<body>
-
-    <header>
-        <a href="/" style="text-decoration: none; color: inherit;">
-            <h1>DeliveryApp</h1>
-        </a>
-
-        <form action="/" method="GET">
-            <input class="search" type="text" name="search" value="{{ search }}" placeholder="음식점이나 메뉴를 검색해보세요">
+{% extends 'app_shell.html' %}
+{% block content %}
+    <section class="search-panel" aria-labelledby="search-title">
+        {% if nickname %}<p class="eyebrow">{{ nickname }}님, 안녕하세요!</p>{% endif %}
+        <h1 id="search-title">오늘은 어떤 메뉴가 당기나요?</h1>
+        <form class="restaurant-search" action="{{ url_for('home') }}" method="get" role="search">
+            <label class="sr-only" for="restaurant-search">음식점 또는 메뉴 검색</label>
+            <input id="restaurant-search" type="search" name="search" value="{{ search }}" placeholder="음식점 또는 메뉴 검색">
+            <button class="app-button" type="submit">검색</button>
         </form>
+    </section>
 
-        {% if nickname %}
+    <section class="app-section" aria-labelledby="restaurants-title">
+        <div class="section-heading">
+            <h2 id="restaurants-title">{{ '검색 결과' if search else '음식점' }}</h2>
+            <span>{{ restaurants|length }}곳</span>
+        </div>
+        <div class="restaurant-grid">
+            {% for restaurant in restaurants %}
+            <a class="app-card restaurant-card" href="{{ url_for('restaurant_detail', restaurant_id=restaurant[0]) }}">
+                <span class="category-tag">{{ restaurant[2] }}</span>
+                <h3>{{ restaurant[1] }}</h3>
+                <p>{{ restaurant[3] }}</p>
+                <span class="card-link">메뉴 보기 <span aria-hidden="true">→</span></span>
+            </a>
+            {% else %}
+            <p class="app-card empty-state">{{ '검색 조건에 맞는 음식점이 없습니다.' if search else '표시할 음식점이 없습니다.' }}</p>
+            {% endfor %}
+        </div>
+    </section>
 
-        <p>{{ nickname }}님 환영합니다!</p>
+    <section class="app-section" aria-labelledby="shortcuts-title">
+        <h2 id="shortcuts-title">바로가기</h2>
+        <div class="shortcut-grid">
+            {% set shortcuts = [
+                ('cart', '장바구니', '담아 둔 메뉴 확인'),
+                ('address', '배달 주소 설정', '내 주변 지점 검색에 사용'),
+                ('orders', '주문내역', '주문 상세와 배달현황'),
+                ('saving', '절약 통계', '가상 주문의 절약 금액과 칼로리'),
+                ('wallet_page', '가상 저금통', '배달 완료로 적립된 포인트')
+            ] %}
+            {% for endpoint, label, description in shortcuts %}
+            <a class="app-card shortcut-card{{ ' wallet-shortcut' if endpoint == 'wallet_page' }}" href="{{ url_for(endpoint) }}">
+                <strong>{{ label }}</strong>
+                <span>{{ description }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
 
-        <a href="/cart">장바구니</a>
-        <a href="/address">배달 주소 설정</a>
-        <a href="/orders">주문(절약)내역</a>
-        <a href="/saving">절약 통계</a>
-        <a href="/logout">로그아웃</a>
-
-        {% else %}
-
-        <a href="/login">로그인</a>
-        <a href="/signup">회원가입</a>
-
-        {% endif %}
-    </header>
-
-    <main class="restaurant-list">
-        <p>실제 제휴·주문·결제가 없는 가상 서비스입니다. 실제 지점 정보는 위치 안내용이며 메뉴·가격은 가상 데이터입니다.</p>
-
-        {% for restaurant in restaurants %}
-
-        <a href="/restaurant/{{ restaurant[0] }}" class="restaurant">
-
-            <h2>{{ restaurant[1] }}</h2>
-
-            <div class="category">
-                {{ restaurant[2] }}
-            </div>
-
-            <p class="description">
-                {{ restaurant[3] }}
-            </p>
-
-        </a>
-
-        {% endfor %}
-
-    </main>
-
-</body>
-
-</html>
+    <p class="service-note">실제 제휴·주문·결제가 없는 가상 서비스입니다. 실제 지점 정보는 위치 안내용이며 메뉴·가격은 가상 데이터입니다.</p>
+{% endblock %}

@@ -1,14 +1,11 @@
-<!DOCTYPE html>
-<html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <title>주문내역 - DeliveryApp</title>
-</head>
-
-<body>
+{% extends 'app_shell.html' %}
+{% block title %}주문내역 - DeliveryApp{% endblock %}
+{% block content %}
 
     <h1>주문(절약)내역</h1>
+    {% for message in get_flashed_messages(category_filter=['order_cancel', 'order_reorder']) %}
+    <p role="status">{{ message }}</p>
+    {% endfor %}
 
     {% if orders %}
 
@@ -18,6 +15,8 @@
         <h2>주문번호 #{{ order[0] }}</h2>
 
         <p>주문 날짜: {{ order[1] }}</p>
+        {% include 'order_cancel.html' %}
+        {% include 'order_reorder.html' %}
 
         <p>
             절약한 금액:
@@ -49,6 +48,4 @@
         <a href="/">← 홈으로</a>
     </p>
 
-</body>
-
-</html>
+{% endblock %}

@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, session, jsonify
+from flask import Flask, render_template, request, redirect, session, jsonify, flash, url_for
 import mysql.connector
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,12 +6,14 @@ import os
 import json
 import secrets
 import hashlib
-from delivery import DeliveryError, inspect_delivery, time_scale
+from delivery import DELIVERY_ELAPSED_SQL, DeliveryError, delivery_progress, inspect_delivery, time_scale
+from wallet import WalletError, reconcile_wallet
+from saving_stats import period_starts, saving_series
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from settings import distance_policy
 from display_names import (load_display_catalog, public_branch, public_route,
                            public_snapshot, virtual_place_name)
-from branches import (mapping_for, search_places, save_places, load_branch, branch_digest,
+from branches import (mapping_for, search_places, find_reorder_places, save_places, load_branch, branch_digest,
                       address_context, validate_grant, split_cart_key)
 
 app = Flask(__name__)
@@ -196,7 +198,7 @@ def cart_branch(cursor, menu_id, branch_id, user_id, address):
     return validate_grant(branch, session.get("branch_grants", {}).get(str(branch_id)), user_id, address)
 
 
-def save_cart(cart, grants=None):
+def cart_changes(cart, grants=None):
     used = {str(split_cart_key(k)[1]) for k in cart if ":" in k}
     grants = session.get("branch_grants", {}) if grants is None else grants
     changes = dict(cart=cart, branch_grants={k: v for k, v in grants.items() if k in used},
@@ -207,7 +209,11 @@ def save_cart(cart, grants=None):
     new_size = len(serializer.dumps(prospective).encode())
     if new_size > 3500 and new_size > len(serializer.dumps(dict(session)).encode()):
         raise DeliveryError("장바구니 저장 공간이 부족합니다. 기존 항목을 유지했으니 일부 항목을 정리해 주세요.")
-    session.update(changes)
+    return changes
+
+
+def save_cart(cart, grants=None):
+    session.update(cart_changes(cart, grants))
 
 
 @app.route("/cart/add", methods=["POST"])
@@ -437,19 +443,44 @@ def order_complete():
     )
 
 
+def can_cancel_order(status, snapshot, elapsed):
+    if status != "active":
+        return False
+    try:
+        return not delivery_progress(snapshot, elapsed)[2]
+    except DeliveryError:
+        return False
+
+
+def cancel_token():
+    if "cancel_token" not in session:
+        session["cancel_token"] = secrets.token_urlsafe(32)
+    return session["cancel_token"]
+
+
+def order_form_fields():
+    session.setdefault("order_token", secrets.token_hex(32))
+    return dict(cancel_token=cancel_token(), cart_revision=cart_revision())
+
+
+def cart_revision():
+    # Checkout keeps its token for retry detection even after it empties the cart.
+    state = [session.get("order_token"), session.get("cart", {})]
+    return hashlib.sha256(json.dumps(state, sort_keys=True).encode()).hexdigest()
+
+
 @app.route("/orders")
 def orders():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
     user_id = session.get("user_id")
-
     if not user_id:
         return redirect("/login")
 
+    connection = get_db_connection()
+    cursor = connection.cursor()
     cursor.execute(
-        """
-        SELECT id, order_date, total_price, total_calories
+        f"""
+        SELECT id, order_date, total_price, total_calories, delivery_address,
+               status, cancelled_at, delivery_snapshot, {DELIVERY_ELAPSED_SQL}
         FROM orders
         WHERE user_id = %s
         ORDER BY order_date DESC
@@ -462,7 +493,9 @@ def orders():
     cursor.close()
     connection.close()
 
-    return render_template("orders.html", orders=orders)
+    cancellable = {row[0] for row in orders if can_cancel_order(row[5], row[7], row[8])}
+    return render_template("orders.html", orders=orders, cancellable=cancellable,
+                           **order_form_fields())
 
 
 @app.route("/orders/<int:order_id>")
@@ -476,8 +509,9 @@ def order_detail(order_id):
     cursor = connection.cursor()
 
     cursor.execute(
-        """
-        SELECT id, order_date, total_price, total_calories, delivery_address
+        f"""
+        SELECT id, order_date, total_price, total_calories, delivery_address,
+               status, cancelled_at, delivery_snapshot, {DELIVERY_ELAPSED_SQL}
         FROM orders
         WHERE id = %s AND user_id = %s
     """,
@@ -519,39 +553,230 @@ def order_detail(order_id):
     cursor.close()
     connection.close()
 
-    return render_template("order_detail.html", order=order, order_items=order_items)
+    cancellable = {order_id} if can_cancel_order(order[5], order[7], order[8]) else set()
+    return render_template("order_detail.html", order=order, order_items=order_items,
+                           cancellable=cancellable, **order_form_fields())
+
+
+MAX_REORDER_QUANTITY = 99
+
+
+@app.post("/orders/<int:order_id>/reorder")
+def reorder(order_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    def failure(message):
+        flash(message, "order_reorder")
+        return redirect(url_for("orders"), code=303)
+
+    token = session.get("cancel_token")
+    if not token or not secrets.compare_digest(token.encode(), request.form.get("cancel_token", "").encode()):
+        return failure("요청을 확인할 수 없습니다. 주문 내역을 새로 열고 다시 시도해 주세요.")
+    if not secrets.compare_digest(cart_revision().encode(), request.form.get("cart_revision", "").encode()):
+        return failure("이미 처리된 요청이거나 장바구니가 변경되었습니다. 주문 내역을 새로 열어 주세요.")
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT id FROM orders WHERE id=%s AND user_id=%s", (order_id, user_id))
+        if not cursor.fetchone():
+            raise DeliveryError("재주문할 주문을 찾을 수 없습니다.")
+        address = member_address(cursor, user_id)
+        cursor.execute("""
+            SELECT oi.menu_id, oi.quantity, m.restaurant_id, obr.restaurant_id,
+                   obr.place_id, obr.brand_name
+            FROM order_items oi
+            LEFT JOIN menus m ON m.id=oi.menu_id
+            LEFT JOIN order_restaurants obr ON obr.id=oi.order_restaurant_id AND obr.order_id=oi.order_id
+            WHERE oi.order_id=%s
+        """, (order_id,))
+        items = cursor.fetchall()
+        if not items:
+            raise DeliveryError("재주문할 메뉴가 없습니다.")
+
+        quantities, mappings, place_ids = {}, {}, {}
+        for menu_id, quantity, restaurant_id, saved_restaurant, place_id, saved_brand in items:
+            if restaurant_id is None:
+                raise DeliveryError("이전 주문에 현재 판매하지 않는 메뉴가 있습니다.")
+            if restaurant_id != saved_restaurant or not place_id or not saved_brand:
+                raise DeliveryError("이전 주문의 지점 정보를 확인할 수 없습니다.")
+            if restaurant_id not in mappings:
+                mappings[restaurant_id] = mapping_for(cursor, restaurant_id)
+            if mappings[restaurant_id][0] != saved_brand:
+                raise DeliveryError("이전 주문의 지점과 현재 브랜드 설정이 일치하지 않습니다.")
+            key = (menu_id, restaurant_id, place_id)
+            if type(quantity) is not int or quantity <= 0:
+                raise DeliveryError("이전 주문의 수량이 올바르지 않습니다.")
+            quantities[key] = quantities.get(key, 0) + quantity
+            if quantities[key] > MAX_REORDER_QUANTITY:
+                raise DeliveryError(f"메뉴·지점별 재주문 수량은 최대 {MAX_REORDER_QUANTITY}개입니다.")
+            place_ids.setdefault(restaurant_id, set()).add(place_id)
+
+        connection.rollback()
+        places = {restaurant_id: find_reorder_places(address, *mappings[restaurant_id], ids)
+                  for restaurant_id, ids in place_ids.items()}
+        if member_address(cursor, user_id, lock=True) != address:
+            raise DeliveryError("배달 주소가 변경되었습니다. 다시 시도해 주세요.")
+        for restaurant_id in sorted(mappings):
+            if mapping_for(cursor, restaurant_id, lock=True) != mappings[restaurant_id]:
+                raise DeliveryError("브랜드 설정이 변경되었습니다. 다시 시도해 주세요.")
+        for menu_id, restaurant_id, _ in sorted(quantities):
+            cursor.execute("SELECT restaurant_id FROM menus WHERE id=%s FOR SHARE", (menu_id,))
+            if cursor.fetchone() != (restaurant_id,):
+                raise DeliveryError("이전 주문의 메뉴 정보가 변경되었습니다.")
+
+        cart = dict(session.get("cart", {}))
+        grants = dict(session.get("branch_grants", {}))
+        branch_ids = {}
+        for restaurant_id, found in sorted(places.items()):
+            for place in save_places(cursor, restaurant_id, [found[key] for key in sorted(found)]):
+                branch_id = place["branch_id"]
+                branch = load_branch(cursor, branch_id, restaurant_id, lock=True)
+                branch_ids[restaurant_id, place["place_id"]] = branch_id
+                grants[str(branch_id)] = {"a": address_context(user_id, address), "d": branch_digest(branch)}
+        for (menu_id, restaurant_id, place_id), quantity in quantities.items():
+            key = f"{menu_id}:{branch_ids[restaurant_id, place_id]}"
+            merged = cart.get(key, 0) + quantity
+            if merged > MAX_REORDER_QUANTITY:
+                raise DeliveryError(f"장바구니 합산 수량은 메뉴·지점별 최대 {MAX_REORDER_QUANTITY}개입니다.")
+            cart[key] = merged
+        changes = cart_changes(cart, grants)
+        connection.commit()
+        session.update(changes)
+        return redirect(url_for("cart"), code=303)
+    except DeliveryError as error:
+        connection.rollback()
+        return failure(str(error))
+    except mysql.connector.Error:
+        connection.rollback()
+        app.logger.error("재주문 DB 요청 실패")
+        return failure("재주문을 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+    finally:
+        cursor.close()
+        connection.close()
+
+
+@app.post("/orders/<int:order_id>/cancel")
+def cancel_order(order_id):
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+
+    expected = session.get("cancel_token")
+    supplied = request.form.get("cancel_token", "")
+    if not expected or not secrets.compare_digest(expected.encode(), supplied.encode()):
+        flash("요청을 확인할 수 없습니다. 주문 내역을 새로 열고 다시 시도해 주세요.", "order_cancel")
+        return redirect(url_for("orders"), code=303)
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        connection.start_transaction()
+        cursor.execute(
+            "SELECT status, delivery_snapshot FROM orders WHERE id=%s AND user_id=%s FOR UPDATE",
+            (order_id, user_id),
+        )
+        order = cursor.fetchone()
+        if not order:
+            raise DeliveryError("취소할 주문을 찾을 수 없습니다.")
+        if order[0] == "cancelled":
+            raise DeliveryError("이미 취소된 주문입니다.")
+        if order[0] != "active":
+            raise DeliveryError("현재 상태에서는 주문을 취소할 수 없습니다.")
+        # MySQL NOW() is fixed at statement start. Read it after acquiring the row lock.
+        cursor.execute(f"SELECT {DELIVERY_ELAPSED_SQL} FROM orders WHERE id=%s", (order_id,))
+        _, _, complete = delivery_progress(order[1], cursor.fetchone()[0])
+        if complete:
+            raise DeliveryError("배달이 완료된 주문은 취소할 수 없습니다.")
+        cursor.execute("SELECT id FROM wallet_transactions WHERE order_id=%s AND type='earn' FOR SHARE",
+                       (order_id,))
+        if cursor.fetchone():
+            raise DeliveryError("저금통에 적립된 주문은 취소할 수 없습니다.")
+        cursor.execute(
+            "UPDATE orders SET status='cancelled', cancelled_at=NOW() WHERE id=%s AND user_id=%s",
+            (order_id, user_id),
+        )
+        connection.commit()
+        flash("주문이 취소되었습니다.", "order_cancel")
+    except DeliveryError as error:
+        connection.rollback()
+        flash(str(error), "order_cancel")
+    except mysql.connector.Error:
+        connection.rollback()
+        app.logger.error("주문 취소 DB 요청 실패")
+        flash("주문 취소를 확인할 수 없습니다. 주문 상태를 확인한 후 다시 시도해 주세요.", "order_cancel")
+    finally:
+        cursor.close()
+        connection.close()
+    return redirect(url_for("orders"), code=303)
 
 
 @app.route("/saving")
 def saving():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
     user_id = session.get("user_id")
-
     if not user_id:
-        cursor.close()
-        connection.close()
         return redirect("/login")
 
-    cursor.execute(
-        """
-        SELECT
-            COUNT(*),
-            COALESCE(SUM(total_price), 0),
-            COALESCE(SUM(total_calories), 0)
-        FROM orders
-        WHERE user_id = %s
-    """,
-        (user_id,),
-    )
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        # order_date is a DATETIME written using the database session clock.
+        cursor.execute("SELECT CURRENT_TIMESTAMP AS as_of")
+        as_of = cursor.fetchone()[0]
+        starts = period_starts(as_of.date())
+        earliest = min(buckets[0] for buckets in starts.values())
+        cursor.execute("""
+            SELECT COUNT(*), COALESCE(SUM(total_price), 0), COALESCE(SUM(total_calories), 0)
+            FROM orders
+            WHERE user_id = %s AND status = 'active'
+              AND (order_date IS NULL OR order_date <= %s)
+        """, (user_id, as_of))
+        saving_data = cursor.fetchone()
+        cursor.execute("""
+            SELECT DATE(order_date) AS saving_day, SUM(total_price)
+            FROM orders
+            WHERE user_id = %s AND status = 'active' AND order_date >= %s AND order_date <= %s
+            GROUP BY DATE(order_date)
+        """, (user_id, earliest, as_of))
+        series = saving_series(starts, cursor.fetchall())
+    finally:
+        cursor.close()
+        connection.close()
 
-    saving_data = cursor.fetchone()
+    return render_template("saving.html", saving_data=saving_data, saving_periods=series)
 
-    cursor.close()
-    connection.close()
 
-    return render_template("saving.html", saving_data=saving_data)
+@app.get("/wallet")
+def wallet_page():
+    user_id = session.get("user_id")
+    if not user_id:
+        return redirect("/login")
+    connection = get_db_connection()
+    try:
+        reconcile_wallet(connection, user_id)
+        cursor = connection.cursor()
+        try:
+            cursor.execute("""
+                SELECT w.balance, t.order_id, t.amount, t.created_at
+                FROM wallets w
+                LEFT JOIN wallet_transactions t ON t.wallet_id=w.id AND t.type='earn'
+                WHERE w.user_id=%s
+                ORDER BY t.created_at DESC, t.id DESC
+            """, (user_id,))
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+    except (mysql.connector.Error, WalletError):
+        app.logger.error("저금통 조회 또는 적립 실패")
+        return render_template("wallet.html", wallet_error="저금통을 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."), 503
+    finally:
+        connection.close()
+    balance = rows[0][0] if rows else 0
+    transactions = [row[1:] for row in rows if row[1] is not None]
+    return render_template("wallet.html", balance=balance, transactions=transactions,
+                           total_earned=sum(row[1] for row in transactions))
 
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -635,6 +860,7 @@ def login():
                     session.pop("cart", None)
                     session.pop("branch_grants", None)
                     session.pop("order_token", None)
+                    session.pop("cancel_token", None)
                 session["user_id"] = user[0]
                 session["nickname"] = user[1]
 
@@ -656,6 +882,7 @@ def logout():
     session.pop("cart", None)
     session.pop("branch_grants", None)
     session.pop("order_token", None)
+    session.pop("cancel_token", None)
     session.pop("last_order_price", None)
     session.pop("last_order_calories", None)
 
@@ -717,31 +944,45 @@ def delivery_status(order_id):
     connection = get_db_connection()
     cursor = connection.cursor()
     try:
-        cursor.execute("SELECT id,order_date,delivery_address,delivery_snapshot,TIMESTAMPDIFF(MICROSECOND,order_date,NOW(6))/1000000 FROM orders WHERE id=%s AND user_id=%s", (order_id,user_id))
+        cursor.execute(f"""SELECT id, order_date, delivery_address, delivery_snapshot,
+                       {DELIVERY_ELAPSED_SQL}, status, cancelled_at
+                       FROM orders WHERE id=%s AND user_id=%s""", (order_id, user_id))
         order = cursor.fetchone()
-        catalog = load_display_catalog(cursor) if order and order[3] else []
+        catalog = load_display_catalog(cursor) if order and order[5] != "cancelled" and order[3] else []
     finally:
         cursor.close()
         connection.close()
     if not order:
         return redirect("/orders")
+    if order[5] == "cancelled":
+        return render_template("delivery_status.html", order=order, cancelled=True)
     snapshot = None
+    elapsed = 0
     error = None
+    complete = False
     try:
         if order[3]:
-            snapshot = json.loads(order[3])
-            from delivery import positive
-            for key in ("duration", "scale", "preparation"):
-                positive(snapshot[key])
-            if len(snapshot["path"]) < 2:
-                raise ValueError()
-            snapshot = public_snapshot(snapshot, catalog)
+            saved_snapshot, elapsed, complete = delivery_progress(order[3], order[4])
+            snapshot = public_snapshot(saved_snapshot, catalog)
         else:
             error = "기존 주문에는 당시 도로 소요시간이 없어 진행 상태를 복원할 수 없습니다. 주문내역은 그대로 유지됩니다."
-    except (ValueError, TypeError, KeyError, DeliveryError):
+    except (ValueError, TypeError, KeyError, AttributeError, DeliveryError):
         snapshot = None
         error = "저장된 배달 정보를 읽을 수 없습니다."
-    return render_template("delivery_status.html", order=order, snapshot=snapshot, route_error=error, elapsed=max(0,float(order[4] or 0)), kakao_javascript_key=os.getenv("KAKAO_JAVASCRIPT_KEY"))
+    wallet_error = None
+    if snapshot and complete and order[5] == "active":
+        try:
+            connection = get_db_connection()
+            try:
+                reconcile_wallet(connection, user_id, order_id)
+            finally:
+                connection.close()
+        except (mysql.connector.Error, WalletError):
+            app.logger.error("배달현황에서 저금통 적립 실패")
+            wallet_error = "지금은 저금통 적립을 확인할 수 없습니다. 저금통에서 다시 확인해 주세요."
+    return render_template("delivery_status.html", order=order, snapshot=snapshot, route_error=error,
+                           elapsed=elapsed, wallet_error=wallet_error,
+                           kakao_javascript_key=os.getenv("KAKAO_JAVASCRIPT_KEY"))
 
 
 if __name__ == "__main__":

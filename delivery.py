@@ -1,7 +1,11 @@
+import json
 import math
 import os
 import requests
 from settings import DELIVERY_LIMIT_METERS
+
+
+DELIVERY_ELAPSED_SQL = "TIMESTAMPDIFF(MICROSECOND,order_date,NOW(6))/1000000"
 
 
 class DeliveryError(Exception):
@@ -19,6 +23,35 @@ def time_scale():
         return positive(float(os.getenv('DELIVERY_TIME_SCALE', '10')))
     except (ValueError, DeliveryError):
         raise DeliveryError('DELIVERY_TIME_SCALE은 양의 유한 숫자여야 합니다.') from None
+
+
+def delivery_progress(raw_snapshot, elapsed):
+    """Read the saved simulation and apply the same completion rule as delivery.js."""
+    try:
+        snapshot = json.loads(raw_snapshot)
+        total = positive(snapshot["preparation"]) + positive(snapshot["duration"])
+        scale = positive(snapshot["scale"])
+        path = snapshot["path"]
+        if not isinstance(path, list) or len(path) < 2:
+            raise ValueError()
+        for point in path:
+            for key, limit in (("lng", 180), ("lat", 90)):
+                value = point[key]
+                if type(value) not in (int, float) or not -limit <= value <= limit:
+                    raise ValueError()
+        routes = snapshot.get("routes", [])
+        if not isinstance(routes, list):
+            raise ValueError()
+        for route in routes:
+            positive(route["distance"])
+            positive(route["duration"])
+        seconds = float(elapsed)
+        if not math.isfinite(seconds) or not math.isfinite(total):
+            raise ValueError()
+        seconds = max(0, seconds)
+        return snapshot, seconds, seconds * scale >= total
+    except (ValueError, TypeError, KeyError, OverflowError, RecursionError, DeliveryError):
+        raise DeliveryError("저장된 배달 정보를 확인할 수 없습니다.") from None
 
 
 def api_get(url, params):
