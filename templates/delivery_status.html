@@ -1,31 +1,29 @@
-<!DOCTYPE html>
-<html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <title>가상 배달현황</title>
-</head>
-
-<body>
+{% extends 'app_shell.html' %}
+{% block title %}가상 배달현황 - DeliveryApp{% endblock %}
+{% block content %}
+    <div class="delivery-page">
     <h1>가상 배달현황</h1>
     <p>주문번호 #{{ order[0] }} / 주문시간 {{ order[1] }}</p>
     <p>배달 주소: {{ order[2] }}</p>
+    <section class="app-card delivery-progress-panel{{ ' delivery-cancelled' if cancelled else '' }}">
     {% if cancelled %}
-    <h2 id="delivery-status">취소된 주문입니다.</h2>
+    <h2 class="delivery-headline" id="delivery-status" aria-live="polite">취소된 주문입니다.</h2>
     {% if order[6] %}<p>취소 일시: {{ order[6] }}</p>{% endif %}
+    </section>
     {% else %}
-    <h2 id="delivery-status">{{ route_error or '배달 상태 확인 중...' }}</h2>
+    <h2 class="delivery-headline" id="delivery-status" aria-live="polite">{{ route_error or ('가상 배달 완료' if complete else '배달 상태 확인 중...') }}</h2>
     <p id="delivery-message" role="status"></p>
-    <progress id="progress" max="1" value="0"></progress>
-    {% if snapshot %}
-    <p>가상 시간 {{ snapshot.scale }}배 / 준비 {{ snapshot.preparation }}초 + 도로 이동 {{ snapshot.duration }}초 (가상 시간)</p>
-    <p>라이더 대표 경로: {{ snapshot.representative }} → 배달 주소. 여러 음식점을 순회하는 경로는 아닙니다.</p>
-    <ul>{% for route in snapshot.routes %}<li>{{ route.name }}{% if route.branch %} (주문 당시 위치 안내: {{
-            route.branch.address }}){% endif %}: 실제 도로 {{ '%.2f'|format(route.distance / 1000) }}km / API 예상 {{
-            route.duration }}초</li>{% endfor %}</ul>
-    {% endif %}
-    <p>실제 GPS 추적이 아닌 주문 당시 도로 경로를 이용한 가상 시뮬레이션입니다.</p>
-    <div id="map" style="width:100%;height:400px"></div>
+    <progress aria-label="배달 진행률" id="progress" max="1" value="0"></progress>
+    <ol class="delivery-steps" aria-label="가상 배달 진행 단계">
+        {% for label in ['주문 접수', '준비 중', '기사 배정', '배달 중', '배달 완료'] %}
+        <li data-delivery-step="{{ loop.index0 }}"><span aria-hidden="true">{{ loop.index }}</span>{{ label }}</li>
+        {% endfor %}
+    </ol>
+    </section>
+    <section class="app-card app-section delivery-map-panel" aria-labelledby="map-title">
+    <h2 id="map-title">배달 위치</h2>
+    <div class="delivery-map" id="map" role="region" aria-label="음식점과 배달 목적지 지도">{{ route_error or '지도를 불러오는 중입니다.' }}</div>
+    </section>
     {% if kakao_javascript_key %}
     <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_javascript_key|urlencode }}"></script>{% endif %}
     <script id="delivery-data" type="application/json">{{ {'snapshot': snapshot, 'elapsed': elapsed}|tojson }}</script>
@@ -33,7 +31,8 @@
     {% endif %}
     {% if wallet_error %}<p role="status">{{ wallet_error }}</p>{% endif %}
     <p><a href="{{ url_for('wallet_page') }}">가상 저금통 보기</a></p>
-    <a href="/orders/{{ order[0] }}">주문 상세보기</a> <a href="/orders">주문내역</a>
-</body>
+    <p class="service-note">실제 주문·결제가 없는 가상 서비스입니다.</p>
+    <div class="order-actions"><a class="app-button" href="/orders/{{ order[0] }}">주문 상세보기</a> <a class="app-button button-secondary" href="/orders">주문내역</a></div>
+    </div>
 
-</html>
+{% endblock %}

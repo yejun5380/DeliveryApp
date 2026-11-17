@@ -2,37 +2,50 @@
 {% block title %}가상 저금통 - DeliveryApp{% endblock %}
 {% block content %}
     <h1>가상 저금통</h1>
-    <p>가상 배달이 완료된 주문은 주문 금액만큼 포인트가 적립됩니다.
-        배달 완료 후 저금통이나 해당 주문의 배달현황을 열면 적립이 반영됩니다.</p>
-    <p class="service-note">포인트는 서비스 안에서 사용하는 가상 포인트이며, 현금으로 인출하거나 환급받을 수 없습니다.</p>
+    <p class="section-description">배달 완료 시 주문 금액의 10%가 적립됩니다. 소수점 이하는 버립니다.</p>
     {% if wallet_error %}
     <p class="app-card" role="alert">{{ wallet_error }}</p>
     {% else %}
-    <div class="wallet-summary">
+    <div class="wallet-summary wallet-dashboard">
         <section class="app-card wallet-balance">
+            <p class="eyebrow">배달 완료로 모은 가상 포인트</p>
             <h2>현재 잔액</h2>
             <p class="points">{{ "{:,}".format(balance) }} 포인트</p>
+            <p class="service-note">실제 현금이 아니며 인출·환급할 수 없습니다.</p>
         </section>
         <section class="app-card">
             <h2>총 적립 포인트</h2>
             <p class="points">{{ "{:,}".format(total_earned) }} 포인트</p>
+            <p class="service-note">완료된 주문으로 지금까지 적립한 포인트입니다.</p>
         </section>
     </div>
     <section class="app-card" aria-labelledby="history-title">
-        <h2 id="history-title">적립 내역</h2>
+        <div class="section-heading"><h2 id="history-title">주문별 적립 내역</h2><span>단위: 포인트</span></div>
         {% if transactions %}
         <ul class="wallet-history">
             {% for order_id, amount, created_at in transactions %}
             <li>
                 <a href="{{ url_for('order_detail', order_id=order_id) }}">주문 #{{ order_id }}</a>
-                <strong>{{ "{:,}".format(amount) }} 포인트</strong>
+                <strong>+{{ "{:,}".format(amount) }} 포인트</strong>
                 <time datetime="{{ created_at|string|replace(' ', 'T') }}">적립 일시 {{ created_at }}</time>
             </li>
             {% endfor %}
         </ul>
         {% else %}
-        <p>아직 적립된 주문이 없습니다.</p>
+        <div class="shopping-empty"><h3>아직 적립된 주문이 없습니다.</h3><p>배달 완료 후 포인트가 쌓여요.</p><a class="app-button" href="{{ url_for('orders') }}">주문내역 확인</a></div>
         {% endif %}
     </section>
+    <section class="app-card app-section wallet-spend-section" aria-labelledby="spend-title">
+        <div class="section-heading"><h2 id="spend-title">포인트 사용 내역</h2><span>총 {{ '{:,}'.format(total_spent) }} 포인트 사용</span></div>
+        {% if spend_transactions %}
+        <ul class="wallet-history wallet-spend">
+            {% for name,amount,created_at in spend_transactions %}
+            <li><a href="{{ url_for('point_shop') }}#purchase-history">{{ name or '포인트 상점 구매' }}</a><strong>−{{ '{:,}'.format(amount) }} 포인트</strong><time datetime="{{ created_at|string|replace(' ','T') }}">사용 일시 {{ created_at }}</time></li>
+            {% endfor %}
+        </ul>
+        {% else %}<p class="section-description">아직 사용한 포인트가 없습니다.</p>{% endif %}
+        <a class="app-button button-secondary" href="{{ url_for('point_shop') }}">포인트 상점 둘러보기</a>
+    </section>
     {% endif %}
+    <p class="service-note">포인트는 가상 포인트이며, 현금으로 인출하거나 환급받을 수 없습니다. 과거 적립 내역은 당시 기준을 유지합니다.</p>
 {% endblock %}

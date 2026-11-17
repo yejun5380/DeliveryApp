@@ -1,46 +1,24 @@
-<!DOCTYPE html>
-<html lang="ko">
-
-<head>
-    <meta charset="UTF-8">
-    <title>배달 주소 - DeliveryApp</title>
-</head>
-
-<body>
-
+{% extends 'app_shell.html' %}
+{% block title %}배달 주소 - DeliveryApp{% endblock %}
+{% block content %}
+<section class="app-card account-panel address-panel">
+    <p class="eyebrow">내 배달 위치</p>
     <h1>배달 주소 설정</h1>
-
-    <form method="POST">
-        <label>배달 주소</label>
-
-        <input type="text" name="address" value="{{ current_address or '' }}" placeholder="배달 받을 주소를 입력하세요" required>
-
-        <button type="submit">주소 저장</button>
+    <p class="section-description">주변 지점 검색과 배달 가능 여부 확인에 사용하는 주소입니다.</p>
+    {% for message in get_flashed_messages(category_filter=['address_saved']) %}
+    <p class="status-panel" role="status">{{ message }}</p>
+    {% endfor %}
+    <section class="status-panel" aria-labelledby="current-address-title">
+        <h2 id="current-address-title">현재 배달 주소</h2>
+        {% if current_address %}<p>{{ current_address }}</p>
+        {% else %}<p>아직 등록된 배달 주소가 없습니다.</p>{% endif %}
+    </section>
+    <form class="account-form" method="POST">
+        <label for="address">{{ '수정할 배달 주소' if current_address else '등록할 배달 주소' }}</label>
+        <input id="address" type="text" name="address" value="{{ current_address or '' }}" autocomplete="street-address" placeholder="배달 받을 주소를 입력하세요" aria-describedby="address-help" required>
+        <p id="address-help" class="field-help">도로명 또는 지번 주소를 정확히 입력해 주세요. 주소를 변경하면 기존 지점과 배달 가능 여부를 다시 확인해야 합니다.</p>
+        <button class="app-button" type="submit">{{ '주소 수정 저장' if current_address else '주소 저장' }}</button>
     </form>
-
-    {% if current_address %}
-    <p>현재 배달 주소: {{ current_address }}</p>
-    {% else %}
-    <p>아직 등록된 배달 주소가 없습니다.</p>
-    {% endif %}
-
-    <p>
-        <a href="/">← 홈으로</a>
-    </p>
-
-    {% if nickname %}
-    <span>{{ nickname }}님</span>
-
-    <a href="/cart">🛒 장바구니</a>
-    <a href="/address">배달 주소 설정</a>
-    <a href="/orders">주문내역</a>
-    <a href="/saving">절약 통계</a>
-    <a href="/logout">로그아웃</a>
-    {% else %}
-    <a href="/login">로그인</a>
-    <a href="/signup">회원가입</a>
-    {% endif %}
-
-</body>
-
-</html>
+    <div class="order-actions"><a href="/">음식점 보러가기</a><a href="/cart">장바구니 확인</a></div>
+</section>
+{% endblock %}

@@ -12,6 +12,7 @@ from uuid import uuid4
 import app as application
 from test_branch_flow import Connection, WALLET_SCHEMA
 from wallet import MAX_BALANCE, WalletError, reconcile_wallet
+from shop_fixtures import SHOP_SCHEMA
 
 
 SNAPSHOT = dict(preparation=600, duration=120, scale=10,
@@ -38,10 +39,16 @@ class WalletTests(unittest.TestCase):
                 total_calories INTEGER NOT NULL DEFAULT 10, delivery_snapshot TEXT,
                 delivery_address TEXT, status TEXT NOT NULL DEFAULT 'active', cancelled_at TEXT
             );
+            CREATE TABLE restaurants(id INTEGER PRIMARY KEY, name TEXT);
+            CREATE TABLE menus(id INTEGER PRIMARY KEY, restaurant_id INTEGER, name TEXT);
+            CREATE TABLE order_items(order_id INTEGER, menu_id INTEGER, order_restaurant_id INTEGER, calories INTEGER, quantity INTEGER);
+            CREATE TABLE order_restaurants(id INTEGER PRIMARY KEY, order_id INTEGER, virtual_name TEXT);
         """)
         self.db.executescript(WALLET_SCHEMA)
+        self.db.executescript(SHOP_SCHEMA)
         self.enterContext(patch('app.get_db_connection', side_effect=self.connect))
         self.enterContext(patch('app.load_display_catalog', return_value=[]))
+        self.enterContext(patch.dict('os.environ', KAKAO_JAVASCRIPT_KEY=''))
         self.client = self.login()
 
     def connect(self):
@@ -80,12 +87,12 @@ class WalletTests(unittest.TestCase):
     def test_completed_delivery_and_wallet_refresh_credit_only_once(self):
         order_id = self.order(age=72, amount=2400)
         self.assertEqual(self.client.get(f'/delivery/{order_id}').status_code, 200)
-        self.assertEqual(self.balance(), (2400,))
+        self.assertEqual(self.balance(), (240,))
         self.client.get(f'/delivery/{order_id}')
         html = self.client.get('/wallet').get_data(as_text=True)
         self.assertIn(f'주문 #{order_id}', html)
-        self.assertIn('2,400 포인트', html)
-        self.assertEqual(self.ledger(), [(order_id, 2400)])
+        self.assertIn('240 포인트', html)
+        self.assertEqual(self.ledger(), [(order_id, 240)])
 
     def test_only_valid_active_completed_orders_are_summed(self):
         first = self.order(amount=101)
@@ -101,8 +108,8 @@ class WalletTests(unittest.TestCase):
         self.db.commit()
         history = self.db.execute('SELECT * FROM orders ORDER BY id').fetchall()
         self.assertEqual(self.client.get('/wallet').status_code, 200)
-        self.assertEqual(self.balance(), (303,))
-        self.assertEqual(self.ledger(), [(first, 101), (second, 202)])
+        self.assertEqual(self.balance(), (30,))
+        self.assertEqual(self.ledger(), [(first, 10), (second, 20)])
         self.assertEqual(self.db.execute('SELECT * FROM orders ORDER BY id').fetchall(), history)
 
     def test_wallet_and_delivery_are_scoped_to_member(self):
@@ -113,7 +120,7 @@ class WalletTests(unittest.TestCase):
         html = self.client.get('/wallet?user_id=2').get_data(as_text=True)
         self.assertNotIn('4,321', html)
         self.assertNotIn(f'주문 #{foreign_order}', html)
-        self.assertEqual(self.ledger(), [(foreign_order, 4321)])
+        self.assertEqual(self.ledger(), [(foreign_order, 432)])
 
     def concurrent_requests(self, callbacks):
         gate = Barrier(len(callbacks))
@@ -134,8 +141,8 @@ class WalletTests(unittest.TestCase):
             lambda c: c.get(f'/delivery/{first}'),
         ])
         self.assertTrue(all(response.status_code == 200 for response in results))
-        self.assertEqual(self.balance(), (579,))
-        self.assertEqual(self.ledger(), [(first, 123), (second, 456)])
+        self.assertEqual(self.balance(), (57,))
+        self.assertEqual(self.ledger(), [(first, 12), (second, 45)])
         with self.assertRaises(sqlite3.IntegrityError):
             self.db.execute("""INSERT INTO wallet_transactions(wallet_id, order_id, type, amount)
                                SELECT id, ?, 'earn', 123 FROM wallets WHERE user_id=1""", (first,))
@@ -147,7 +154,7 @@ class WalletTests(unittest.TestCase):
     def test_cancel_racing_with_wallet_keeps_status_and_ledger_consistent(self):
         completed = self.order()
         in_progress = self.order(age=1)
-        for order_id, message in ((completed, '배달이 완료된 주문은 취소할 수 없습니다.'),
+        for order_id, message in ((completed, '주문 접수 단계가 끝나 취소할 수 없습니다.'),
                                   (in_progress, '주문이 취소되었습니다.')):
             wallet, cancel = self.concurrent_requests([
                 lambda c: c.get('/wallet'),
@@ -156,7 +163,7 @@ class WalletTests(unittest.TestCase):
             ])
             self.assertEqual(wallet.status_code, 200)
             self.assertIn(message, cancel.get_data(as_text=True))
-        self.assertEqual(self.ledger(), [(completed, 100)])
+        self.assertEqual(self.ledger(), [(completed, 10)])
         self.assertEqual(self.db.execute('SELECT status FROM orders ORDER BY id').fetchall(),
                          [('active',), ('cancelled',)])
         # The ledger still blocks cancellation if the clock moves backwards.

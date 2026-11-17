@@ -53,7 +53,9 @@ def reconcile_wallet(connection, user_id, order_id=None):
             except DeliveryError:
                 continue
             if complete:
-                earnings.append((candidate, amount))
+                # Preserve recorded earnings; only uncredited orders reach here.
+                # Integer division floors the 10% reward, including a valid zero credit.
+                earnings.append((candidate, amount // 10))
 
         if earnings:
             cursor.execute("SELECT id, balance FROM wallets WHERE user_id=%s FOR UPDATE", (user_id,))

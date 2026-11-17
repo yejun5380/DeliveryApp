@@ -1,69 +1,17 @@
-<!DOCTYPE html>
-<html lang="ko">
+{% extends 'app_shell.html' %}
+{% block title %}주문 완료 - DeliveryApp{% endblock %}
+{% block content %}
+    <section class="app-card shopping-empty order-complete">
 
-<head>
-    <meta charset="UTF-8">
-    <title>주문 완료 - DeliveryApp</title>
-
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background-color: #f7f7f7;
-            text-align: center;
-        }
-
-        .complete {
-            background-color: white;
-            margin: 80px 20px;
-            padding: 40px 20px;
-            border-radius: 20px;
-        }
-
-        .icon {
-            font-size: 60px;
-        }
-
-        h1 {
-            margin-top: 20px;
-        }
-
-        .message {
-            color: #777;
-        }
-
-        .saving {
-            margin-top: 30px;
-            padding: 20px;
-            background-color: #f7f7f7;
-            border-radius: 15px;
-        }
-
-        .home-button {
-            display: block;
-            margin-top: 20px;
-            padding: 15px;
-            background-color: black;
-            color: white;
-            text-decoration: none;
-            border-radius: 10px;
-        }
-    </style>
-</head>
-
-<body>
-
-    <main class="complete">
-
-        <div class="icon">✅</div>
+        <div class="complete-icon" aria-hidden="true">✅</div>
 
         <h1>주문이 완료되었습니다!</h1>
 
-        <p class="message">
+        <p class="section-description">
             실제 결제 없이 주문이 완료되었습니다.
         </p>
 
-        <div class="saving">
+        <div class="status-panel">
 
             <h2>절약 성공!</h2>
 
@@ -88,12 +36,11 @@
 
         </div>
 
-        <a href="/" class="home-button">
+        <a href="/" class="app-button">
             홈으로 돌아가기
         </a>
 
-    </main>
+    </section>
 
-</body>
 
-</html>
+{% endblock %}

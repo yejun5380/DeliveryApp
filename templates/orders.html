@@ -4,43 +4,49 @@
 
     <h1>주문(절약)내역</h1>
     {% for message in get_flashed_messages(category_filter=['order_cancel', 'order_reorder']) %}
-    <p role="status">{{ message }}</p>
+    <p class="status-panel" role="status">{{ message }}</p>
     {% endfor %}
 
     {% if orders %}
 
+    <div class="order-list">
     {% for order in orders %}
 
-    <div>
-        <h2>주문번호 #{{ order[0] }}</h2>
+    <article class="app-card order-card">
+        <div class="section-heading"><h2>주문번호 #{{ order[0] }}</h2><span class="order-badge badge-{{ order_states[order[0]].tone }}">{{ order_states[order[0]].label }}</span></div>
+        <h3>{{ order[9] if order|length > 9 and order[9] else '저장된 음식점 정보 없음' }}</h3>
 
         <p>주문 날짜: {{ order[1] }}</p>
-        {% include 'order_cancel.html' %}
-        {% include 'order_reorder.html' %}
+
 
         <p>
-            절약한 금액:
+            주문 금액:
             {{ "{:,}".format(order[2]) }}원
         </p>
 
         <p>
-            절약한 칼로리:
+            주문 칼로리:
             {{ "{:,}".format(order[3]) }} kcal
         </p>
 
-        <a href="/orders/{{ order[0] }}">
+        <div class="order-actions"><a class="app-button" href="/orders/{{ order[0] }}">
             주문 상세보기
         </a>
 
-        <hr>
-    </div>
+        {% if order_states[order[0]].tone == 'active' %}
+        <a class="app-button button-secondary" href="/delivery/{{ order[0] }}" data-delivery-remaining="{{ order_states[order[0]].remaining }}">배달 현황</a>
+        {% endif %}
+        {% include 'order_cancel.html' %}
+        {% include 'order_reorder.html' %}
+        </div>
+    </article>
 
     {% endfor %}
+    </div>
 
     {% else %}
 
-    <p>아직 주문(절약)내역이 없습니다.</p>
-    <a href="/">음식점 보러가기</a>
+    <div class="app-card shopping-empty"><h2>아직 주문(절약)내역이 없습니다.</h2><p>좋아하는 메뉴로 첫 가상 주문을 시작해 보세요.</p><a class="app-button" href="/">음식점 보러가기</a></div>
 
     {% endif %}
 
@@ -48,4 +54,5 @@
         <a href="/">← 홈으로</a>
     </p>
 
+<script src="{{ url_for('static', filename='order_actions.js') }}" defer></script>
 {% endblock %}

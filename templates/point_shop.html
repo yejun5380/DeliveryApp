@@ -1,0 +1,61 @@
+{% extends 'app_shell.html' %}
+{% block title %}포인트 상점 - DeliveryApp{% endblock %}
+{% block content %}
+<h1>포인트 상점</h1>
+<p class="section-description">차곡차곡 모은 포인트로 나만의 가상 상품을 만나보세요.</p>
+{% for message in get_flashed_messages(category_filter=['shop_success']) %}<p class="status-panel" role="status">{{ message }}</p>{% endfor %}
+{% for message in get_flashed_messages(category_filter=['shop_error']) %}<p class="form-error" role="alert">{{ message }}</p>{% endfor %}
+{% if shop_error %}
+<p class="form-error" role="alert">{{ shop_error }}</p>
+{% else %}
+<section class="app-card wallet-balance shop-balance" aria-labelledby="shop-balance-title">
+    <h2 id="shop-balance-title">내 보유 포인트</h2>
+    <p class="points">{{ '{:,}'.format(balance) }} <span>포인트</span></p>
+    <a href="{{ url_for('wallet_page') }}">적립·사용 내역 보기 →</a>
+</section>
+<section class="app-section" aria-labelledby="shop-products-title">
+    <h2 id="shop-products-title">포인트로 모으는 즐거움</h2>
+    <div class="shop-grid">
+    {% for product in products %}
+    <article class="app-card shop-product">
+        <div class="shop-product-art"><span class="shop-art-fallback" aria-hidden="true">📱</span><img src="{{ product.image }}" alt="{{ product.name }} 가상 스마트폰 일러스트" onerror="this.hidden=true"></div>
+        <div class="shop-product-info">
+            <span class="category-tag">가상 상품</span>
+            <h3>{{ product.name }}</h3>
+            <p>{{ product.description }}</p>
+            <p class="shop-price">{{ '{:,}'.format(product.price) }} <span>포인트</span></p>
+            <div class="section-heading"><span>목표 달성률</span><strong>{{ product.progress }}%</strong></div>
+            <progress class="shop-progress" max="100" value="{{ product.progress }}" aria-label="{{ product.name }} 목표 달성률 {{ product.progress }}%"></progress>
+            {% if product.shortfall %}<p class="shop-shortfall">{{ '{:,}'.format(product.shortfall) }}포인트 더 모으면 구매할 수 있어요.</p>
+            {% else %}<p class="shop-ready">포인트가 충분해요. 가상 구매가 가능합니다.</p>{% endif %}
+            <form class="shop-purchase-form" method="post" action="{{ url_for('shop_purchase', product_id=product.id) }}" data-name="{{ product.name }}" data-price="{{ '{:,}'.format(product.price) }}" data-can-purchase="{{ 'false' if product.shortfall else 'true' }}">
+                <input type="hidden" name="shop_csrf_token" value="{{ shop_csrf_token }}">
+                <input type="hidden" name="purchase_offer" value="{{ product.offer }}">
+                <button class="app-button shop-buy" type="submit" disabled>{{ '포인트 부족' if product.shortfall else '가상 구매하기' }}</button>
+            </form>
+        </div>
+    </article>
+    {% else %}<div class="app-card shopping-empty"><h3>새로운 상품을 준비하고 있어요.</h3></div>{% endfor %}
+    </div>
+</section>
+<section class="app-card app-section" id="purchase-history" aria-labelledby="purchase-history-title">
+    <h2 id="purchase-history-title">내 구매 내역</h2>
+    {% if purchases %}
+    <ul class="wallet-history shop-history">
+        {% for identity,name,price,purchased_at in purchases %}
+        <li><strong>{{ name }}</strong><span>−{{ '{:,}'.format(price) }} 포인트</span><time datetime="{{ purchased_at|string|replace(' ','T') }}">구매 일시 {{ (purchased_at|string)[:16] }}</time></li>
+        {% endfor %}
+    </ul>
+    {% else %}<p class="section-description">아직 구매한 상품이 없습니다. 포인트를 모아 첫 가상 상품을 만나보세요.</p>{% endif %}
+</section>
+<dialog class="app-card shop-dialog" id="shop-confirm" aria-labelledby="shop-confirm-title" aria-describedby="shop-confirm-description">
+    <h2 id="shop-confirm-title">가상 상품을 구매할까요?</h2>
+    <p id="shop-confirm-description"><strong id="shop-confirm-name"></strong> 구매에 <strong id="shop-confirm-price"></strong>포인트를 사용합니다.</p>
+    <p class="service-note">가상 상품이며 실제 결제·배송·현금 교환은 제공하지 않습니다.</p>
+    <div class="order-actions"><button class="app-button button-secondary" type="button" id="shop-confirm-cancel">돌아가기</button><button class="app-button" type="button" id="shop-confirm-buy">구매하기</button></div>
+</dialog>
+<noscript><p class="status-panel">구매하려면 JavaScript를 활성화해 주세요.</p></noscript>
+<script src="{{ url_for('static', filename='shop.js') }}" defer></script>
+{% endif %}
+<p class="service-note">실제 상품이 아닌 가상 상품입니다. 실제 결제·배송·현금 교환은 제공하지 않습니다.</p>
+{% endblock %}

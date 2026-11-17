@@ -16,6 +16,7 @@ from flask import template_rendered
 import app as application
 from branches import SearchCache
 from test_branches import MAPPINGS, place
+from shop_fixtures import SHOP_SCHEMA
 
 
 WALLET_SCHEMA = """
@@ -73,6 +74,10 @@ class Cursor:
     def close(self):
         self.cursor.close()
 
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
+
 
 class Connection:
     def __init__(self, db):
@@ -111,6 +116,7 @@ class BranchFlowTests(unittest.TestCase):
             INSERT INTO users(id,address) VALUES(1,'인천 주소'),(2,'전주 주소');
         ''')
         self.db.executescript(WALLET_SCHEMA)
+        self.db.executescript(SHOP_SCHEMA)
         for identity, name, brand in MAPPINGS:
             self.db.execute('INSERT INTO restaurants VALUES(?,?,\'음식점\',\'가상 설명\',NULL,\'기존 고정 주소\')', (identity, name))
             self.db.execute('INSERT INTO menus VALUES(?,?,?,100,20,\'가상 메뉴\',NULL)', (identity, identity, name+' 메뉴'))
@@ -125,7 +131,7 @@ class BranchFlowTests(unittest.TestCase):
         for patcher in (patch('app.get_db_connection', side_effect=lambda: Connection(self.db)),
                         patch('branches.search_cache', SearchCache()),
                         patch('branches.coordinate_cache', SearchCache()),
-                        patch.dict(os.environ, KAKAO_REST_API_KEY='test'),
+                        patch.dict(os.environ, KAKAO_REST_API_KEY='test', KAKAO_JAVASCRIPT_KEY=''),
                         patch('delivery.requests.get', side_effect=self.http)):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -246,6 +252,52 @@ class BranchFlowTests(unittest.TestCase):
             connect.assert_not_called()
         response = self.client.get('/saving')
         self.assertEqual(response.get_data(as_text=True).count('이 기간에 표시할 절약 금액이 없습니다.'), 3)
+
+    def test_renewed_menu_cart_totals_and_empty_states(self):
+        detail = self.client.get('/restaurant/1').get_data(as_text=True)
+        self.assertIn('class="app-shell"', detail)
+        self.assertIn('class="app-card menu-card"', detail)
+        self.assertIn('class="app-button branch-submit"', detail)
+        self.assertIn('장바구니가 비어 있습니다.', self.client.get('/cart').get_data(as_text=True))
+        selection = self.search()[0]
+        self.add(selection)
+        self.add(selection)
+        html = self.client.get('/cart').get_data(as_text=True)
+        self.assertIn('200원</strong>', html)
+        self.assertIn('40 kcal</strong>', html)
+        self.assertIn(selection['display_name'], html)
+        self.assertIn('수량 2개', html)
+        self.assertIn('id="order-button" type="submit" disabled', html)
+        fingerprint = self.client.post('/cart/delivery-check').json['fingerprint']
+        self.assertEqual(self.submit(fingerprint).status_code, 302)
+        self.assertEqual(self.client.get('/order/complete').status_code, 200)
+        with self.client.session_transaction() as session:
+            self.assertFalse(session.get('cart'))
+        self.assertIn('장바구니가 비어 있습니다.', self.client.get('/cart').get_data(as_text=True))
+        self.db.execute('DELETE FROM menus WHERE restaurant_id=2')
+        self.assertIn('아직 등록된 메뉴가 없어요', self.client.get('/restaurant/2').get_data(as_text=True))
+
+    def test_order_status_cards_and_historical_item_totals(self):
+        self.add(self.search()[0])
+        fingerprint = self.client.post('/cart/delivery-check').json['fingerprint']
+        self.submit(fingerprint)
+        for age, label in ((0, '주문 접수'), (49, '배달 중'), (100, '배달 완료')):
+            self.db.execute("UPDATE orders SET order_date=datetime('now', ?) WHERE id=1", (f'-{age} seconds',))
+            self.db.commit()
+            for path in ('/orders', '/orders/1'):
+                html = self.client.get(path).get_data(as_text=True)
+                self.assertIn(label, html)
+                self.assertIn('옷데리아', html)
+                self.assertNotIn('롯데리아', html)
+            self.assertEqual('주문 취소</button>' in html, age < 16)
+        detail = self.client.get('/orders/1').get_data(as_text=True)
+        self.assertIn('개당 100원 / 20 kcal', detail)
+        self.db.execute("UPDATE orders SET status='cancelled' WHERE id=1")
+        self.db.commit()
+        self.assertIn('badge-cancelled', self.client.get('/orders').get_data(as_text=True))
+        cancelled = self.client.get('/delivery/1').get_data(as_text=True)
+        self.assertIn('취소된 주문입니다.', cancelled)
+        self.assertNotIn('id="delivery-data"', cancelled)
 
     def test_same_menu_two_branches_and_quantity_buttons(self):
         first, second = self.search()
@@ -399,7 +451,7 @@ class BranchFlowTests(unittest.TestCase):
         self.assertIn('아직 적립된 주문이 없습니다.', self.client.get('/wallet').get_data(as_text=True))
         delivery = self.client.get('/delivery/1').get_data(as_text=True)
         self.assertIn('delivery-data', delivery)
-        self.assertIn('라이더 대표 경로', delivery)
+        self.assertIn('배달 위치', delivery)
         self.assertEqual(self.client.get('/saving').status_code,200)
         self.assertEqual(self.client.get('/orders').status_code,200)
 
@@ -473,7 +525,7 @@ class BranchFlowTests(unittest.TestCase):
         html = self.client.get('/orders').get_data(as_text=True)
         self.assertNotIn(f'/orders/{completed}/cancel', html)
         self.assertIn(f'/orders/{ongoing}/cancel', html)
-        self.assertIn('배달이 완료된 주문은 취소할 수 없습니다.', self.post_cancel(completed))
+        self.assertIn('주문 접수 단계가 끝나 취소할 수 없습니다.', self.post_cancel(completed))
         self.assertIn('주문이 취소되었습니다.', self.post_cancel(ongoing))
 
     def test_missing_or_damaged_delivery_data_blocks_cancel(self):
@@ -644,7 +696,7 @@ class BranchFlowTests(unittest.TestCase):
         self.assertNotIn('변경 주소',detail)
         self.assertEqual(self.db.execute('SELECT delivery_snapshot FROM orders').fetchone()[0], original)
         snapshot = json.loads(original)
-        self.assertEqual(snapshot['version'],2)
+        self.assertEqual(snapshot['version'],3)
         self.assertEqual(snapshot['routes'][0]['branch']['lng'],selection['lng'])
         self.assertEqual(self.client.get('/delivery/1').status_code,200)
 
@@ -673,6 +725,51 @@ class BranchFlowTests(unittest.TestCase):
         self.assertEqual(self.search(),[])
         self.assertEqual(self.search(),[])
         self.assertEqual(len(self.http_calls),2)  # one geocode + one search
+
+    def test_account_errors_keep_form_and_never_echo_password(self):
+        self.client.get('/logout')
+        credentials = {'username': 'ui-member', 'password': 'private-test-password', 'nickname': '화면 회원'}
+        self.assertEqual(self.client.post('/signup', data=credentials).status_code, 302)
+        duplicate = self.client.post('/signup', data=credentials).get_data(as_text=True)
+        self.assertIn('이미 사용 중인 아이디입니다.', duplicate)
+        self.assertIn('class="account-form"', duplicate)
+        self.assertIn('value="ui-member"', duplicate)
+        self.assertNotIn(credentials['password'], duplicate)
+        failed = self.client.post('/login', data={'username': 'ui-member', 'password': 'wrong-test-password'}).get_data(as_text=True)
+        self.assertIn('아이디 또는 비밀번호가 틀렸습니다.', failed)
+        self.assertIn('role="alert"', failed)
+        self.assertNotIn('wrong-test-password', failed)
+
+    def test_address_form_save_notice_and_member_isolation(self):
+        self.db.execute('UPDATE users SET address=NULL WHERE id=1')
+        self.db.commit()
+        html = self.client.get('/address').get_data(as_text=True)
+        self.assertIn('아직 등록된 배달 주소가 없습니다.', html)
+        for address in ('테스트 도로명 10', '테스트 도로명 20'):
+            html = self.client.post('/address', data={'address': address}, follow_redirects=True).get_data(as_text=True)
+            self.assertIn('배달 주소가 저장되었습니다.', html)
+            self.assertIn(f'value="{address}"', html)
+        self.assertEqual(self.db.execute('SELECT address FROM users WHERE id=2').fetchone()[0], '전주 주소')
+
+    def test_wallet_and_saving_empty_summaries_and_periods(self):
+        wallet = self.client.get('/wallet').get_data(as_text=True)
+        self.assertIn('0 포인트', wallet)
+        self.assertIn('아직 적립된 주문이 없습니다.', wallet)
+        saving = self.client.get('/saving').get_data(as_text=True)
+        self.assertIn('0회', saving)
+        self.assertIn('아직 절약 기록이 없습니다.', saving)
+        for key in ('daily', 'weekly', 'monthly'):
+            self.assertIn(f'id="saving-{key}"', saving)
+        self.assertEqual(saving.count('이 기간에 표시할 절약 금액이 없습니다.'), 3)
+        self.add(self.search()[0])
+        fingerprint = self.client.post('/cart/delivery-check').json['fingerprint']
+        self.submit(fingerprint)
+        self.db.execute("UPDATE orders SET order_date=datetime('now','-100 seconds') WHERE id=1")
+        self.db.commit()
+        wallet = self.client.get('/wallet').get_data(as_text=True)
+        self.assertIn('+10 포인트', wallet)
+        self.assertIn('적립 일시', wallet)
+        self.assertIn('현금으로 인출하거나 환급받을 수 없습니다.', wallet)
 
     def test_signup_hashed_login_and_logout_regression(self):
         self.client.get('/logout')

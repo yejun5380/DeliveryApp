@@ -14,6 +14,8 @@ class Element {
     querySelectorAll() { return this.children.flatMap(child => child.children || []).filter(child => child instanceof Element); }
     querySelector() { return this.token; }
     style = {};
+    setAttribute(name, value) { (this.attributes ||= {})[name] = value; }
+    removeAttribute(name) { delete (this.attributes ||= {})[name]; }
     set textContent(value) { this.text = value; this.children = []; }
     get textContent() { return this.text || ''; }
 }
@@ -99,7 +101,7 @@ async function cartCheck() {
     assert.equal(ids['order-button'].disabled,true);
     h.context.fetch=async()=>({ok:true,json:async()=>({status:'unavailable',limit_meters_label:'10,000m',restaurants:[{name:'위치',status:'unavailable',distance:10001}]})});
     await ids['check-delivery'].fire('click');
-    assert.ok(ids['delivery-check-result'].children[0].textContent.includes('10,000m 초과'));
+    assert.ok(ids['delivery-check-result'].children[0].textContent.includes('배달 가능 지역을 벗어났습니다'));
     assert.equal(ids['order-button'].disabled,true);
     await mutation.fire('submit');
     assert.equal(ids['fingerprint'].value,'');
@@ -111,11 +113,12 @@ async function cartCheck() {
     assert.equal(ids['fingerprint'].value,'','late response after mutation must be ignored');
 }
 
-async function riderLifecycle() {
+async function riderLifecycle(mapMode = 'normal') {
     const ids = Object.fromEntries(['delivery-data','map','delivery-status','progress','delivery-message'].map(id=>[id,new Element()]));
     ids['delivery-data'].textContent=JSON.stringify({elapsed:0,snapshot:{preparation:600,duration:120,scale:10,
         representative:'가상 지점',path:[{lat:0,lng:0},{lat:0,lng:1},{lat:0,lng:4}]}});
-    const h=harness('delivery.js',ids);
+    const steps=Array.from({length:5},()=>new Element());
+    const h=harness('delivery.js',ids, {'[data-delivery-step]':steps});
     let now=1, overlay, polyline;
     const markerTitles=[];
     h.context.performance={now:()=>now,getEntriesByType:()=>[{responseStart:1}]};
@@ -127,10 +130,27 @@ async function riderLifecycle() {
         CustomOverlay:class {constructor(options){Object.assign(this,options);overlay=this;}setPosition(position){this.position=position;}setMap(map){this.map=map;}},
         Marker:class {constructor(options){markerTitles.push(options.title);}},
     }};
+    if(mapMode==='missing') delete h.context.kakao;
+    if(mapMode==='throw') h.context.kakao.maps.Map=class {constructor(){throw Error('SDK initialization failed');}};
     h.run();
+    assert.equal(steps[0].attributes['aria-current'],'step');
+    if(mapMode!=='normal') {
+        assert.ok(ids.map.textContent.includes('지도를 불러오지 못했습니다'));
+        now=72001;
+        [...h.intervals.values()][0].fn();
+        assert.equal(ids.progress.value,1,'map errors must not stop delivery progress');
+        assert.equal(steps[4].attributes['aria-current'],'step');
+        return;
+    }
     assert.equal(markerTitles[0],'가상 지점');
     assert.equal(h.intervals.size,1);
     assert.equal([...h.intervals.values()][0].delay,100);
+    for(const [time, stage] of [[21001,1],[41001,2],[61001,3]]) {
+        now=time;
+        [...h.intervals.values()][0].fn();
+        assert.equal(steps[stage].attributes['aria-current'],'step');
+        assert.equal(steps[0].dataset.state,'done');
+    }
     await h.events.fire('pageshow');
     assert.equal(h.intervals.size,1,'pageshow must not duplicate the timer');
     h.doc.hidden=true; await h.doc.fire('visibilitychange');
@@ -143,11 +163,37 @@ async function riderLifecycle() {
     assert.equal(h.intervals.size,0,'completion clears timer');
     assert.equal(overlay.position.lng,4);
     assert.equal(ids.progress.value,1);
+    assert.equal(steps[4].attributes['aria-current'],'step');
+    assert.equal(steps[0].dataset.state,'done');
     await h.events.fire('pagehide');
     assert.equal(h.intervals.size,0);
 }
 
+function orderActions() {
+    const link=new Element(); link.dataset.deliveryRemaining='60';
+    const form=new Element(), button=new Element(); form.token=button; form.dataset.cancelRemaining='16';
+    const h=harness('order_actions.js',{}, {'[data-delivery-remaining]':[link], '[data-cancel-remaining]':[form]});
+    let now=1;
+    h.context.performance={now:()=>now,getEntriesByType:()=>[{responseStart:1}]};
+    h.run();
+    assert.equal([...h.timeouts.values()][0].delay,60000);
+    assert.equal([...h.timeouts.values()][1].delay,16000);
+    [...h.timeouts.values()][1].fn();
+    assert.equal(button.disabled,true);
+    assert.equal(button.textContent,'취소 마감');
+    assert.notEqual(link.hidden,true);
+    [...h.timeouts.values()][0].fn();
+    assert.equal(link.hidden,true,'delivery links hide at server completion time without a page refresh');
+    now=61001;
+    let prevented=false;
+    return form.fire('submit',{preventDefault(){prevented=true;}}).then(()=>{
+        assert.equal(prevented,true,'a stale cancel form cannot submit after reception ends');
+        return h.events.fire('pageshow');
+    }).then(()=>assert.equal(link.hidden,true));
+}
+
 (async()=>{
-    await branchPicker(); await cartCheck(); await riderLifecycle();
+    await orderActions();
+    await branchPicker(); await cartCheck(); await riderLifecycle(); await riderLifecycle('missing'); await riderLifecycle('throw');
     console.log('PASS: lazy branch selection, request deduplication, cart invalidation, double submission, 10km labels, rider 100ms timer and resume/completion');
 })().catch(error=>{console.error(error);process.exitCode=1;});

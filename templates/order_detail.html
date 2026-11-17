@@ -2,12 +2,16 @@
 {% block title %}주문 상세 - DeliveryApp{% endblock %}
 {% block content %}
 
-    <p>실제 음식점과 제휴하거나 주문·결제하지 않는 가상 서비스입니다.</p>
+    <p class="service-note">실제 음식점과 제휴하거나 주문·결제하지 않는 가상 서비스입니다.</p>
     <h1>주문 #{{ order[0] }} 상세내역</h1>
 
+    <section class="app-card order-overview">
+    <span class="order-badge badge-{{ order_state.tone }}">{{ order_state.label }}</span>
     <p>주문 날짜: {{ order[1] }}</p>
+    <div class="order-actions">
     {% include 'order_cancel.html' %}
     {% include 'order_reorder.html' %}
+    </div>
 
     {% if order[4] %}
     <p>배달 주소: {{ order[4] }}</p>
@@ -15,11 +19,12 @@
     <p>배달 주소: 저장된 주소 없음</p>
     {% endif %}
 
-    <hr>
-
+    </section>
+    <h2 class="app-section">주문한 메뉴와 지점</h2>
+    <div class="order-item-list">
     {% for item in order_items %}
 
-    <div>
+    <article class="app-card order-item">
 
         <p>가상 음식점: {{ item[4] }}</p>
         {% if item|length > 5 and item[5] %}
@@ -28,7 +33,7 @@
 
         <h2>{{ item[0] }}</h2>
 
-        <p>수량: {{ item[1] }}개</p>
+        <p>수량: {{ item[1] }}개 · 개당 {{ "{:,}".format(item[2]) }}원 / {{ "{:,}".format(item[3]) }} kcal</p>
 
         <p>
             금액:
@@ -40,32 +45,34 @@
             {{ "{:,}".format(item[3] * item[1]) }} kcal
         </p>
 
-        <hr>
 
-    </div>
+
+    </article>
 
     {% endfor %}
+    </div>
+    <section class="app-card order-total app-section">
 
     <h2>
-        총 절약 금액:
+        총 주문 금액:
         {{ "{:,}".format(order[2]) }}원
     </h2>
 
     <h2>
-        총 절약 칼로리:
+        총 주문 칼로리:
         {{ "{:,}".format(order[3]) }} kcal
     </h2>
 
-    <p>
-        <a href="/delivery/{{ order[0] }}">🚴 배달현황 보기</a>
-    </p>
+    </section>
+    {% if order_state.tone == 'active' %}<p>
+        <a class="app-button" href="/delivery/{{ order[0] }}" data-delivery-remaining="{{ order_state.remaining }}">🚴 배달현황 보기</a>
+    </p>{% endif %}
 
     <p>
         <a href="/orders">← 주문내역으로 돌아가기</a>
     </p>
 
-    <a href="/orders">
-        주문내역으로 돌아가기
-    </a>
 
+
+<script src="{{ url_for('static', filename='order_actions.js') }}" defer></script>
 {% endblock %}

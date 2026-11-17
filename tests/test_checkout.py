@@ -13,6 +13,7 @@ ROUTE = dict(name='A', status='available', distance=10000, duration=120,
 class CheckoutTests(unittest.TestCase):
     def setUp(self):
         application.app.config.update(TESTING=True, SECRET_KEY='test')
+        self.enterContext(patch.dict('os.environ', KAKAO_JAVASCRIPT_KEY=''))
         self.client = application.app.test_client()
         self.connection = Mock()
         self.cursor = self.connection.cursor.return_value
@@ -85,7 +86,7 @@ class CheckoutTests(unittest.TestCase):
         with patch('app.inspect_delivery') as check:
             response = self.client.get('/delivery/7')
             check.assert_not_called()
-        self.assertIn('복원할 수 없습니다', response.get_data(as_text=True))
+        self.assertIn('배달 현황을 확인할 수 없습니다', response.get_data(as_text=True))
 
     def test_delivery_ownership_and_not_found(self):
         self.cursor.fetchone.return_value = None

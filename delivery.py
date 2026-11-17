@@ -7,6 +7,10 @@ from settings import DELIVERY_LIMIT_METERS
 
 DELIVERY_ELAPSED_SQL = "TIMESTAMPDIFF(MICROSECOND,order_date,NOW(6))/1000000"
 
+# New orders take 600 virtual seconds / 10 = 60 wall-clock seconds.
+# Existing orders continue to use their persisted snapshot timings.
+NEW_DELIVERY_TIMING = dict(preparation=480, duration=120, scale=10)
+
 
 class DeliveryError(Exception):
     pass
@@ -54,16 +58,22 @@ def delivery_progress(raw_snapshot, elapsed):
         raise DeliveryError("저장된 배달 정보를 확인할 수 없습니다.") from None
 
 
+def cancellation_remaining(raw_snapshot, elapsed):
+    """Stage zero ends exactly at preparation / 3 virtual seconds."""
+    snapshot, seconds, _ = delivery_progress(raw_snapshot, elapsed)
+    return max(0.0, (snapshot['preparation'] / 3) / snapshot['scale'] - seconds)
+
+
 def api_get(url, params):
     key = os.getenv('KAKAO_REST_API_KEY')
     if not key:
-        raise DeliveryError('카카오 REST API 설정을 확인해 주세요.')
+        raise DeliveryError('주변 정보를 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.')
     try:
         response = requests.get(url, headers={'Authorization': f'KakaoAK {key}'}, params=params, timeout=(3, 10))
         response.raise_for_status()
         return response.json()
     except (requests.RequestException, ValueError):
-        raise DeliveryError('카카오 API 요청 실패 또는 시간 초과로 확인할 수 없습니다.') from None
+        raise DeliveryError('주변 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.') from None
 
 
 def address_to_coords(text):

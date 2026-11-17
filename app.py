@@ -6,9 +6,11 @@ import os
 import json
 import secrets
 import hashlib
-from delivery import DELIVERY_ELAPSED_SQL, DeliveryError, delivery_progress, inspect_delivery, time_scale
+from decimal import Decimal, ROUND_DOWN
+from delivery import DELIVERY_ELAPSED_SQL, NEW_DELIVERY_TIMING, DeliveryError, delivery_progress, cancellation_remaining, inspect_delivery
 from wallet import WalletError, reconcile_wallet
-from saving_stats import period_starts, saving_series
+from shop import ShopError, purchase_product
+from saving_stats import period_starts, saving_series, calorie_series
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from settings import distance_policy
 from display_names import (load_display_catalog, public_branch, public_route,
@@ -30,8 +32,8 @@ def shared_settings():
 def database_unavailable(error):
     app.logger.error("DB 요청 실패 (연결 정보와 상세 예외 생략)")
     if request.path.endswith("/branches") or request.path == "/cart/delivery-check":
-        return jsonify(message="DB 연결 또는 지점 마이그레이션 상태를 확인해 주세요."), 503
-    return "DB 연결 또는 지점 마이그레이션 상태를 확인해 주세요.", 503
+        return jsonify(message="서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요."), 503
+    return "서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", 503
 
 
 def get_db_connection():
@@ -48,38 +50,39 @@ def get_db_connection():
 
 @app.route("/")
 def home():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    search = request.args.get("search", "")
-
-    if search:
-        cursor.execute(
-            """
-            SELECT DISTINCT r.id, r.name, r.category, r.description
-            FROM restaurants r
-            LEFT JOIN menus m ON r.id = m.restaurant_id
-            WHERE r.name LIKE %s
-               OR m.name LIKE %s
-        """,
-            (f"%{search}%", f"%{search}%"),
-        )
-    else:
-        cursor.execute("""
-            SELECT id, name, category, description
-            FROM restaurants
-        """)
-
-    restaurants = cursor.fetchall()
-
-    cursor.close()
-    connection.close()
-
-    nickname = session.get("nickname")
-
+    categories = ("치킨", "피자", "햄버거")
+    category = request.args.get("category", "").strip()
+    if category and category not in categories:
+        return "지원하지 않는 음식 카테고리입니다.", 400
+    search = request.args.get("search", "").strip()
+    restaurants = []
+    # The landing page is category-first; only query restaurant results on demand.
+    if category or search:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        try:
+            conditions, parameters = [], []
+            if category:
+                conditions.append("r.category = %s")
+                parameters.append(category)
+            if search:
+                conditions.append("(r.name LIKE %s OR m.name LIKE %s)")
+                parameters.extend((f"%{search}%", f"%{search}%"))
+            cursor.execute(
+                """SELECT DISTINCT r.id, r.name, r.category, r.description
+                   FROM restaurants r LEFT JOIN menus m ON r.id = m.restaurant_id
+                   WHERE """ + " AND ".join(conditions) + " ORDER BY r.id",
+                tuple(parameters),
+            )
+            restaurants = cursor.fetchall()
+        finally:
+            cursor.close()
+            connection.close()
     return render_template(
-        "index.html", restaurants=restaurants, nickname=nickname, search=search
+        "index.html", restaurants=restaurants, nickname=session.get("nickname"),
+        search=search, category=category, categories=categories,
     )
+
 
 
 @app.route("/restaurant/<int:restaurant_id>")
@@ -388,10 +391,10 @@ def order():
         if any(r["status"] != "available" for r in results):
             catalog = load_display_catalog(cursor)
             results = [public_route(result, catalog) for result in results]
-            messages = [f'{r["name"]}: ' + (f'실제 도로 거리 {r["distance"]:,.0f}m, {distance_policy()["limit_label"]} 초과' if r["status"] == "unavailable" else r.get("message", "확인 불가")) for r in results if r["status"] != "available"]
+            messages = [f'{r["name"]}: ' + ('배달 가능 지역을 벗어났습니다.' if r["status"] == "unavailable" else r.get("message", "확인 불가")) for r in results if r["status"] != "available"]
             return app.response_class(" / ".join(messages), status=422, mimetype="text/plain")
         representative = max(results, key=lambda r: r["duration"])
-        snapshot = dict(version=2, limit_meters=distance_policy()["limit_meters"], routes=[{k: v for k, v in row.items() if k != "path"} for row in results], representative=representative["name"], path=representative["path"], duration=representative["duration"], scale=time_scale(), preparation=600)
+        snapshot = dict(version=3, limit_meters=distance_policy()["limit_meters"], routes=[{k: v for k, v in row.items() if k != "path"} for row in results], representative=representative["name"], path=representative["path"], reward_percent=10, **NEW_DELIVERY_TIMING)
         cursor.execute("INSERT INTO orders (user_id,total_price,total_calories,delivery_address,delivery_snapshot,request_token) VALUES (%s,%s,%s,%s,%s,%s)", (user_id,total_price,total_calories,address,json.dumps(snapshot, ensure_ascii=False),token))
         order_id = cursor.lastrowid
         order_branch_ids = {}
@@ -421,7 +424,7 @@ def order():
     except Exception:
         connection.rollback()
         app.logger.error("주문 처리 실패 (상세 예외 및 인증 정보는 기록하지 않음)")
-        return "주문 처리 중 오류가 발생했습니다. DB 마이그레이션 및 설정을 확인해 주세요.", 500
+        return "주문을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.", 500
     finally:
         cursor.close()
         connection.close()
@@ -447,9 +450,29 @@ def can_cancel_order(status, snapshot, elapsed):
     if status != "active":
         return False
     try:
-        return not delivery_progress(snapshot, elapsed)[2]
+        return cancellation_remaining(snapshot, elapsed) > 0
     except DeliveryError:
         return False
+
+
+def order_presentation(row):
+    """Read-only display state; cancellation and wallet rules stay independent."""
+    if row[5] == "cancelled":
+        return dict(label="주문 취소", tone="cancelled")
+    if row[5] != "active":
+        return dict(label="상태 확인 불가", tone="unknown")
+    try:
+        snapshot, elapsed, complete = delivery_progress(row[7], row[8])
+        if complete:
+            return dict(label="배달 완료", tone="complete")
+        remaining = (snapshot["preparation"] + snapshot["duration"]) / snapshot["scale"] - elapsed
+        if elapsed * snapshot["scale"] < snapshot["preparation"] / 3:
+            return dict(label="주문 접수", tone="active", remaining=remaining)
+        if elapsed * snapshot["scale"] >= snapshot["preparation"]:
+            return dict(label="배달 중", tone="active", remaining=remaining)
+        return dict(label="준비 중", tone="active", remaining=remaining)
+    except DeliveryError:
+        return dict(label="진행 정보 없음", tone="unknown")
 
 
 def cancel_token():
@@ -480,7 +503,12 @@ def orders():
     cursor.execute(
         f"""
         SELECT id, order_date, total_price, total_calories, delivery_address,
-               status, cancelled_at, delivery_snapshot, {DELIVERY_ELAPSED_SQL}
+               status, cancelled_at, delivery_snapshot, {DELIVERY_ELAPSED_SQL},
+               (SELECT GROUP_CONCAT(DISTINCT COALESCE(obr.virtual_name, r.name))
+                FROM order_items oi JOIN menus m ON m.id=oi.menu_id
+                JOIN restaurants r ON r.id=m.restaurant_id
+                LEFT JOIN order_restaurants obr ON obr.id=oi.order_restaurant_id AND obr.order_id=oi.order_id
+                WHERE oi.order_id=orders.id) AS restaurant_names
         FROM orders
         WHERE user_id = %s
         ORDER BY order_date DESC
@@ -495,6 +523,8 @@ def orders():
 
     cancellable = {row[0] for row in orders if can_cancel_order(row[5], row[7], row[8])}
     return render_template("orders.html", orders=orders, cancellable=cancellable,
+                           cancel_remaining={row[0]: cancellation_remaining(row[7], row[8]) for row in orders if row[0] in cancellable},
+                           order_states={row[0]: order_presentation(row) for row in orders},
                            **order_form_fields())
 
 
@@ -555,6 +585,8 @@ def order_detail(order_id):
 
     cancellable = {order_id} if can_cancel_order(order[5], order[7], order[8]) else set()
     return render_template("order_detail.html", order=order, order_items=order_items,
+                           cancel_remaining={order_id: cancellation_remaining(order[7], order[8])} if cancellable else {},
+                           order_state=order_presentation(order),
                            cancellable=cancellable, **order_form_fields())
 
 
@@ -687,17 +719,22 @@ def cancel_order(order_id):
             raise DeliveryError("현재 상태에서는 주문을 취소할 수 없습니다.")
         # MySQL NOW() is fixed at statement start. Read it after acquiring the row lock.
         cursor.execute(f"SELECT {DELIVERY_ELAPSED_SQL} FROM orders WHERE id=%s", (order_id,))
-        _, _, complete = delivery_progress(order[1], cursor.fetchone()[0])
-        if complete:
-            raise DeliveryError("배달이 완료된 주문은 취소할 수 없습니다.")
+        elapsed = cursor.fetchone()[0]
+        snapshot, _, _ = delivery_progress(order[1], elapsed)
+        if cancellation_remaining(order[1], elapsed) <= 0:
+            raise DeliveryError("주문 접수 단계가 끝나 취소할 수 없습니다.")
         cursor.execute("SELECT id FROM wallet_transactions WHERE order_id=%s AND type='earn' FOR SHARE",
                        (order_id,))
         if cursor.fetchone():
             raise DeliveryError("저금통에 적립된 주문은 취소할 수 없습니다.")
+        # Recheck at the write statement too, in case the ledger lock consumed time.
+        deadline = (snapshot['preparation'] / 3) / snapshot['scale']
         cursor.execute(
-            "UPDATE orders SET status='cancelled', cancelled_at=NOW() WHERE id=%s AND user_id=%s",
-            (order_id, user_id),
+            f"UPDATE orders SET status='cancelled', cancelled_at=NOW() WHERE id=%s AND user_id=%s AND status='active' AND {DELIVERY_ELAPSED_SQL}<%s",
+            (order_id, user_id, deadline),
         )
+        if cursor.rowcount != 1:
+            raise DeliveryError("주문 접수 단계가 끝나 취소할 수 없습니다.")
         connection.commit()
         flash("주문이 취소되었습니다.", "order_cancel")
     except DeliveryError as error:
@@ -741,11 +778,24 @@ def saving():
             GROUP BY DATE(order_date)
         """, (user_id, earliest, as_of))
         series = saving_series(starts, cursor.fetchall())
+        cursor.execute("""
+            SELECT DATE(o.order_date) AS saving_day, oi.menu_id, m.name, r.name, SUM(oi.calories * oi.quantity)
+            FROM order_items oi
+            JOIN orders o ON o.id=oi.order_id
+            JOIN menus m ON m.id=oi.menu_id
+            JOIN restaurants r ON r.id=m.restaurant_id
+            WHERE o.user_id=%s AND o.status='active'
+              AND o.order_date>=%s AND o.order_date<=%s
+            GROUP BY DATE(o.order_date), oi.menu_id, m.name, r.name
+            ORDER BY saving_day, oi.menu_id
+        """, (user_id, earliest, as_of))
+        calorie_periods = calorie_series(starts, cursor.fetchall())
     finally:
         cursor.close()
         connection.close()
 
-    return render_template("saving.html", saving_data=saving_data, saving_periods=series)
+    return render_template("saving.html", saving_data=saving_data, saving_periods=series,
+                           calorie_periods=calorie_periods)
 
 
 @app.get("/wallet")
@@ -766,6 +816,13 @@ def wallet_page():
                 ORDER BY t.created_at DESC, t.id DESC
             """, (user_id,))
             rows = cursor.fetchall()
+            cursor.execute("""
+                SELECT p.product_name,t.amount,t.created_at
+                FROM wallets w JOIN wallet_transactions t ON t.wallet_id=w.id AND t.type='spend'
+                LEFT JOIN point_purchases p ON p.wallet_transaction_id=t.id AND p.user_id=w.user_id
+                WHERE w.user_id=%s ORDER BY t.created_at DESC,t.id DESC
+            """, (user_id,))
+            spend_transactions = cursor.fetchall()
         finally:
             cursor.close()
     except (mysql.connector.Error, WalletError):
@@ -776,7 +833,87 @@ def wallet_page():
     balance = rows[0][0] if rows else 0
     transactions = [row[1:] for row in rows if row[1] is not None]
     return render_template("wallet.html", balance=balance, transactions=transactions,
+                           spend_transactions=spend_transactions,
+                           total_spent=sum(row[1] for row in spend_transactions),
                            total_earned=sum(row[1] for row in transactions))
+
+
+def shop_signer():
+    return URLSafeTimedSerializer(app.secret_key, salt='point-shop-purchase-v1')
+
+
+@app.get('/shop')
+def point_shop():
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect('/login')
+    session.setdefault('shop_csrf_token', secrets.token_urlsafe(32))
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute('SELECT balance FROM wallets WHERE user_id=%s', (user_id,))
+        row = cursor.fetchone()
+        balance = row[0] if row else 0
+        if type(balance) is not int or not 0 <= balance <= 2**63-1:
+            raise ShopError('포인트 잔액을 확인할 수 없습니다.')
+        cursor.execute('SELECT id,name,description,price_points,image_path FROM point_products WHERE is_active=1 ORDER BY id')
+        products = []
+        for identity,name,description,price,path in cursor.fetchall():
+            if type(price) is not int or price <= 0:
+                continue
+            offer = shop_signer().dumps(dict(user=user_id,product=identity,price=price,nonce=secrets.token_hex(32)))
+            progress = min(Decimal(100),Decimal(balance)*100/price).quantize(Decimal('0.1'),rounding=ROUND_DOWN)
+            products.append(dict(id=identity,name=name,description=description,price=price,image=path,
+                                 shortfall=max(0,price-balance),progress=f'{progress:.1f}',
+                                 offer=offer))
+        cursor.execute('''SELECT id,product_name,price_points,purchased_at FROM point_purchases
+                          WHERE user_id=%s ORDER BY purchased_at DESC,id DESC''', (user_id,))
+        purchases = cursor.fetchall()
+    except (mysql.connector.Error, ShopError):
+        app.logger.error('포인트 상점 조회 실패 (상세 정보 생략)')
+        return render_template('point_shop.html', shop_error='상점을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'),503
+    finally:
+        cursor.close()
+        connection.rollback()
+        connection.close()
+    return render_template('point_shop.html',balance=balance,products=products,purchases=purchases,
+                           shop_csrf_token=session['shop_csrf_token'])
+
+
+@app.post('/shop/<int:product_id>/purchase')
+def shop_purchase(product_id):
+    user_id = session.get('user_id')
+    if not user_id:
+        return redirect('/login')
+    expected = session.get('shop_csrf_token','')
+    supplied = request.form.get('shop_csrf_token','')
+    if not expected or not secrets.compare_digest(expected.encode(),supplied.encode()):
+        flash('구매 요청을 확인할 수 없습니다. 상점을 새로 열어 주세요.','shop_error')
+        return redirect(url_for('point_shop'),code=303)
+    try:
+        offer = shop_signer().loads(request.form.get('purchase_offer',''),max_age=900)
+        if offer['user'] != user_id or offer['product'] != product_id:
+            raise ValueError()
+        price,nonce = offer['price'],offer['nonce']
+    except (BadSignature,SignatureExpired,KeyError,TypeError,ValueError):
+        flash('구매 정보가 만료되었거나 잘못되었습니다. 상점에서 다시 확인해 주세요.','shop_error')
+        return redirect(url_for('point_shop'),code=303)
+    connection = get_db_connection()
+    try:
+        result = purchase_product(connection,user_id,product_id,price,nonce)
+        message = '이미 처리된 구매입니다. 구매 내역을 확인해 주세요.' if result['replayed'] else f"{result['name']} 가상 구매가 완료되었습니다. {result['price']:,}포인트를 사용했습니다."
+        flash(message,'shop_success')
+    except ShopError as error:
+        flash(str(error),'shop_error')
+    except mysql.connector.Error:
+        app.logger.error('포인트 구매 처리 실패 (상세 정보 생략)')
+        flash('구매를 처리하지 못했습니다. 구매 내역을 확인한 뒤 다시 시도해 주세요.','shop_error')
+    except Exception:
+        app.logger.error('포인트 구매 처리 중 예외 발생 (상세 정보 생략)')
+        flash('구매를 처리하지 못했습니다. 구매 내역을 확인한 뒤 다시 시도해 주세요.','shop_error')
+    finally:
+        connection.close()
+    return redirect(url_for('point_shop'),code=303)
 
 
 @app.route("/signup", methods=["GET", "POST"])
@@ -798,7 +935,8 @@ def signup():
     if existing_user:
         cursor.close()
         connection.close()
-        return "이미 사용 중인 아이디입니다."
+        return render_template("signup.html", error="이미 사용 중인 아이디입니다.",
+                               username=username, nickname=nickname)
 
     hashed_password = generate_password_hash(password)
 
@@ -861,6 +999,9 @@ def login():
                     session.pop("branch_grants", None)
                     session.pop("order_token", None)
                     session.pop("cancel_token", None)
+                    session.pop("last_order_price", None)
+                    session.pop("last_order_calories", None)
+                    session.pop('shop_csrf_token', None)
                 session["user_id"] = user[0]
                 session["nickname"] = user[1]
 
@@ -870,13 +1011,14 @@ def login():
 
         connection.close()
 
-        return "아이디 또는 비밀번호가 틀렸습니다."
+        return render_template("login.html", error="아이디 또는 비밀번호가 틀렸습니다.", username=username)
 
     return render_template("login.html")
 
 
 @app.route("/logout")
 def logout():
+    session.pop('shop_csrf_token', None)
     session.pop("user_id", None)
     session.pop("nickname", None)
     session.pop("cart", None)
@@ -915,6 +1057,7 @@ def address():
         cursor.close()
         connection.close()
 
+        flash("배달 주소가 저장되었습니다.", "address_saved")
         return redirect("/address")
 
     cursor.execute(
@@ -965,7 +1108,7 @@ def delivery_status(order_id):
             saved_snapshot, elapsed, complete = delivery_progress(order[3], order[4])
             snapshot = public_snapshot(saved_snapshot, catalog)
         else:
-            error = "기존 주문에는 당시 도로 소요시간이 없어 진행 상태를 복원할 수 없습니다. 주문내역은 그대로 유지됩니다."
+            error = "이 주문의 배달 현황을 확인할 수 없습니다. 주문내역은 유지됩니다."
     except (ValueError, TypeError, KeyError, AttributeError, DeliveryError):
         snapshot = None
         error = "저장된 배달 정보를 읽을 수 없습니다."
@@ -981,7 +1124,7 @@ def delivery_status(order_id):
             app.logger.error("배달현황에서 저금통 적립 실패")
             wallet_error = "지금은 저금통 적립을 확인할 수 없습니다. 저금통에서 다시 확인해 주세요."
     return render_template("delivery_status.html", order=order, snapshot=snapshot, route_error=error,
-                           elapsed=elapsed, wallet_error=wallet_error,
+                           elapsed=elapsed, complete=complete, wallet_error=wallet_error,
                            kakao_javascript_key=os.getenv("KAKAO_JAVASCRIPT_KEY"))
 
 

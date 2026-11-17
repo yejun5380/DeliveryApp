@@ -3,16 +3,35 @@
     <section class="search-panel" aria-labelledby="search-title">
         {% if nickname %}<p class="eyebrow">{{ nickname }}님, 안녕하세요!</p>{% endif %}
         <h1 id="search-title">오늘은 어떤 메뉴가 당기나요?</h1>
+        <p class="home-intro">좋아하는 음식을 고르고, 내 배달 주소 주변 지점을 찾아보세요.</p>
         <form class="restaurant-search" action="{{ url_for('home') }}" method="get" role="search">
+            {% if category %}<input type="hidden" name="category" value="{{ category }}">{% endif %}
             <label class="sr-only" for="restaurant-search">음식점 또는 메뉴 검색</label>
             <input id="restaurant-search" type="search" name="search" value="{{ search }}" placeholder="음식점 또는 메뉴 검색">
             <button class="app-button" type="submit">검색</button>
         </form>
     </section>
 
+    <section class="app-section" aria-labelledby="categories-title">
+        <div class="section-heading">
+            <h2 id="categories-title">음식 카테고리</h2>
+            {% if category or search %}<a href="{{ url_for('home') }}">선택 초기화</a>{% endif %}
+        </div>
+        <div class="food-category-grid">
+            {% for name in categories %}
+            <a class="app-card food-category-card" href="{{ url_for('home', category=name, search=search) }}"{% if category == name %} aria-current="true"{% endif %}>
+                <span class="food-category-icon" aria-hidden="true">{{ {'치킨': '🍗', '피자': '🍕', '햄버거': '🍔'}[name] }}</span>
+                <strong>{{ name }}</strong>
+                <span class="food-category-caption">{{ {'치킨': '바삭하고 든든하게', '피자': '한 조각의 즐거움', '햄버거': '한 입 가득 든든하게'}[name] }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if category or search %}
     <section class="app-section" aria-labelledby="restaurants-title">
         <div class="section-heading">
-            <h2 id="restaurants-title">{{ '검색 결과' if search else '음식점' }}</h2>
+            <h2 id="restaurants-title">{{ category ~ ' 음식점' if category else '검색 결과' }}{% if category and search %} 검색 결과{% endif %}</h2>
             <span>{{ restaurants|length }}곳</span>
         </div>
         <div class="restaurant-grid">
@@ -21,20 +40,24 @@
                 <span class="category-tag">{{ restaurant[2] }}</span>
                 <h3>{{ restaurant[1] }}</h3>
                 <p>{{ restaurant[3] }}</p>
-                <span class="card-link">메뉴 보기 <span aria-hidden="true">→</span></span>
+                <span class="card-link">메뉴 · 주변 지점 보기 <span aria-hidden="true">→</span></span>
             </a>
             {% else %}
-            <p class="app-card empty-state">{{ '검색 조건에 맞는 음식점이 없습니다.' if search else '표시할 음식점이 없습니다.' }}</p>
+            <div class="app-card empty-state">
+                <p>{{ '검색 조건에 맞는 음식점이 없습니다.' if search else '아직 등록된 음식점이 없습니다. 새로운 음식점을 준비 중이에요.' }}</p>
+                {% if search %}<a href="{{ url_for('home', category=category) }}">검색어 지우기</a> · {% endif %}
+                <a href="{{ url_for('home') }}">다른 카테고리 선택하기</a>
+            </div>
             {% endfor %}
         </div>
     </section>
+    {% endif %}
 
     <section class="app-section" aria-labelledby="shortcuts-title">
         <h2 id="shortcuts-title">바로가기</h2>
         <div class="shortcut-grid">
             {% set shortcuts = [
                 ('cart', '장바구니', '담아 둔 메뉴 확인'),
-                ('address', '배달 주소 설정', '내 주변 지점 검색에 사용'),
                 ('orders', '주문내역', '주문 상세와 배달현황'),
                 ('saving', '절약 통계', '가상 주문의 절약 금액과 칼로리'),
                 ('wallet_page', '가상 저금통', '배달 완료로 적립된 포인트')

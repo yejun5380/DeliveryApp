@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="420" viewBox="0 0 560 420" role="img" aria-labelledby="title desc">
+  <title id="title">어른폰 18 가상 스마트폰</title>
+  <desc id="desc">초록색 배경 위의 자체 제작 스마트폰 일러스트</desc>
+  <rect width="560" height="420" rx="28" fill="#e2f3e9"/>
+  <circle cx="405" cy="96" r="65" fill="#c8e8d6"/>
+  <ellipse cx="282" cy="365" rx="145" ry="18" fill="#b7d9c6"/>
+  <g transform="translate(155 56) rotate(-12 70 145)">
+    <rect width="142" height="285" rx="26" fill="#397860" stroke="#255841" stroke-width="5"/>
+    <rect x="12" y="14" width="78" height="82" rx="18" fill="#78a790"/>
+    <g fill="#153c2a" stroke="#a8c5b5" stroke-width="4"><circle cx="35" cy="38" r="16"/><circle cx="68" cy="65" r="16"/><circle cx="35" cy="76" r="14"/></g>
+    <circle cx="71" cy="177" r="18" fill="#99c4ad"/>
+  </g>
+  <g transform="translate(278 51) rotate(9 70 145)">
+    <rect width="142" height="291" rx="27" fill="#183a2d" stroke="#102b20" stroke-width="5"/>
+    <rect x="7" y="8" width="128" height="275" rx="21" fill="#9ccfb5"/>
+    <path d="M7 191C45 109 93 229 135 119V262Q135 283 114 283H28Q7 283 7 262Z" fill="#4b9974"/>
+    <path d="M7 230C43 175 87 262 135 190V262Q135 283 114 283H28Q7 283 7 262Z" fill="#126748"/>
+    <rect x="47" y="16" width="48" height="13" rx="7" fill="#183a2d"/>
+    <rect x="49" y="268" width="44" height="4" rx="2" fill="#d9f0e3"/>
+  </g>
+</svg>

@@ -11,4 +11,9 @@ for (const [seconds,stage] of [[0,0],[20,1],[40,2],[60,3],[72,4]]) assert.equal(
 assert.equal(state(66,snapshot).rider,.5);
 assert.equal(state(7200,snapshot).progress,1);
 assert.equal(state(-5,snapshot).rider,0);
+const current={preparation:480,duration:120,scale:10};
+for(const [seconds,stage] of [[0,0],[16,1],[32,2],[48,3],[59.999,3],[60,4]]) assert.equal(state(seconds,current).stage,stage);
+assert.equal(state(59.999,current).progress<1,true);
+assert.equal(state(60,current).progress,1);
+assert.equal(state(60,snapshot).stage,3,'legacy snapshots keep their original completion time');
 console.log('PASS: distance interpolation, duplicate points, endpoints, five stages, shared clock and refresh reconstruction');

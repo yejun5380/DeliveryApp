@@ -1,27 +1,22 @@
-<!DOCTYPE html>
-<html lang="ko">
+{% extends 'app_shell.html' %}
+{% block title %}회원가입 - DeliveryApp{% endblock %}
+{% block content %}
+<section class="app-card account-panel">
+    <p class="eyebrow">DeliveryApp</p><h1>회원가입</h1><p class="section-description">나만의 가상 주문과 절약 기록을 시작해 보세요.</p>
 
-<head>
-    <meta charset="UTF-8">
-    <title>회원가입 - DeliveryApp</title>
-</head>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <form class="account-form" action="/signup" method="POST">
 
-<body>
+        <label for="username">아이디</label><input id="username" type="text" name="username" value="{{ username or '' }}" autocomplete="username" placeholder="아이디" required>
 
-    <h1>회원가입</h1>
+        <label for="password">비밀번호</label><input id="password" type="password" name="password" autocomplete="new-password" placeholder="비밀번호" required>
 
-    <form action="/signup" method="POST">
+        <label for="nickname">닉네임</label><input id="nickname" type="text" name="nickname" value="{{ nickname or '' }}" autocomplete="nickname" placeholder="닉네임" required>
 
-        <input type="text" name="username" placeholder="아이디" required>
-
-        <input type="password" name="password" placeholder="비밀번호" required>
-
-        <input type="text" name="nickname" placeholder="닉네임" required>
-
-        <button type="submit">회원가입</button>
+        <button class="app-button" type="submit">회원가입</button>
 
     </form>
 
-</body>
-
-</html>
+<p class="account-switch">이미 계정이 있나요? <a href="/login">로그인</a></p>
+</section>
+{% endblock %}

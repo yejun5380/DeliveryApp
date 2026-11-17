@@ -1,4 +1,40 @@
 from datetime import timedelta
+from decimal import Decimal
+
+
+def menu_calorie_chart(rows):
+    """Dependency-free donut segments; callers group by menu ID, never by name."""
+    colors = ('#126748', '#2869a0', '#aa4c21', '#7951a1', '#80701b', '#237f82', '#ad3e66', '#52616b')
+    items = []
+    total = sum(max(0, int(row[3])) for row in rows)
+    cumulative = 0
+    for menu_id, name, restaurant, calories in rows:
+        calories = max(0, int(calories))
+        if not calories:
+            continue
+        start = Decimal(cumulative) * 100 / total
+        cumulative += calories
+        end = Decimal(cumulative) * 100 / total
+        items.append(dict(menu_id=menu_id, name=name, restaurant=restaurant,
+                          calories=calories, percent=f'{Decimal(calories)*100/total:.1f}',
+                          color=colors[len(items) % len(colors)], start=f'{start:.6f}', end=f'{end:.6f}'))
+    gradient = ', '.join(f"{item['color']} {item['start']}% {item['end']}%" for item in items)
+    return dict(total=total, items=items, gradient=gradient)
+
+
+def calorie_series(starts, rows):
+    """Aggregate the same recent windows as money charts, preserving menu IDs."""
+    series = {}
+    for period, buckets in starts.items():
+        menus = {}
+        for day, menu_id, name, restaurant, calories in rows:
+            if day < buckets[0]:
+                continue
+            if menu_id not in menus:
+                menus[menu_id] = [menu_id, name, restaurant, 0]
+            menus[menu_id][3] += int(calories)
+        series[period] = menu_calorie_chart(sorted(menus.values(), key=lambda row: (-row[3], row[0])))
+    return series
 
 
 def period_starts(today):

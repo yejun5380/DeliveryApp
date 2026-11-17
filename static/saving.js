@@ -1,5 +1,4 @@
-const savingControls = document.querySelector('.saving-periods');
-if (savingControls) {
+document.querySelectorAll('.saving-periods').forEach(savingControls => {
     const buttons = [...savingControls.querySelectorAll('button')];
     const panels = buttons.map(button => document.getElementById(button.getAttribute('aria-controls')));
 
@@ -13,4 +12,4 @@ if (savingControls) {
     buttons.forEach((button, index) => button.addEventListener('click', () => selectPeriod(index)));
     selectPeriod(0);
     savingControls.hidden = false;
-}
+});

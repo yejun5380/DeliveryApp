@@ -36,16 +36,21 @@ if(typeof document!=='undefined') {
     if(snapshot) {
         const started=performance.getEntriesByType('navigation')[0]?.responseStart || performance.now(), path=DeliverySimulation.buildPath(snapshot.path);
         let marker=null, map=null, timer=null;
+        try {
         if(globalThis.kakao?.maps) {
             const points=snapshot.path.map(p=>new kakao.maps.LatLng(p.lat,p.lng));
             map=new kakao.maps.Map(document.getElementById('map'),{center:points[0],level:4});
-            new kakao.maps.Polyline({map,path:points,strokeWeight:5,strokeColor:'#3366ff'});
+            new kakao.maps.Polyline({map,path:points,strokeWeight:5,strokeColor:'#126748'});
             const bounds=new kakao.maps.LatLngBounds(); points.forEach(p=>bounds.extend(p)); map.setBounds(bounds);
             const icon=document.createElement('div'); icon.textContent='🛵'; icon.style.fontSize='30px';
             marker=new kakao.maps.CustomOverlay({position:points[0],content:icon,yAnchor:1,zIndex:10});
             new kakao.maps.Marker({map,position:points[0],title:snapshot.representative});
             new kakao.maps.Marker({map,position:points[points.length-1],title:'배달 목적지'});
-        } else document.getElementById('map').textContent='지도를 불러오지 못했습니다. JavaScript 키·허용 도메인·네트워크를 확인해 주세요.';
+        } else document.getElementById('map').textContent='지도를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        } catch {
+            marker=null; map=null;
+            document.getElementById('map').textContent='지도를 불러오지 못했습니다. 배달 진행 상태는 계속 확인할 수 있습니다.';
+        }
         const labels=['주문 접수','음식 준비 중','배달기사 배정','배달 중','가상 배달 완료'];
         function stop() {if(timer!==null) clearInterval(timer); timer=null;}
         function update() {
@@ -53,6 +58,11 @@ if(typeof document!=='undefined') {
             document.getElementById('delivery-status').textContent=labels[current.stage];
             document.getElementById('progress').value=current.progress;
             document.getElementById('delivery-message').textContent=`배달 진행률 ${(current.progress*100).toFixed(1)}%`;
+            document.querySelectorAll('[data-delivery-step]').forEach((step, index) => {
+                step.dataset.state=index<current.stage?'done':index===current.stage?'current':'waiting';
+                if(index===current.stage) step.setAttribute('aria-current','step');
+                else step.removeAttribute('aria-current');
+            });
             if(marker) {const p=DeliverySimulation.position(path,current.rider); marker.setPosition(new kakao.maps.LatLng(p.lat,p.lng)); marker.setMap(current.stage>=2?map:null);}
             if(current.stage===4) stop();
             return current.stage;
@@ -62,5 +72,5 @@ if(typeof document!=='undefined') {
         window.addEventListener('pagehide',stop);
         window.addEventListener('pageshow',start);
         start();
-    }
+    } else document.getElementById('map').textContent='저장된 위치 정보가 없어 지도를 표시할 수 없습니다.';
 }

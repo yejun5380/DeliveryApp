@@ -43,7 +43,7 @@
                 if (seen.has(place.place_id)) continue;
                 seen.add(place.place_id);
                 const label = document.createElement('label');
-                label.style.display = 'block'; label.style.padding = '12px';
+                label.className = 'branch-option';
                 const radio = document.createElement('input');
                 const selectionExpires = Date.now() + 10*60*1000;
                 radio.type = 'radio'; radio.name = 'location-choice';
@@ -56,16 +56,16 @@
                     clearTimeout(expiry);
                     tokens.forEach(input => { input.value = place.selection_token; });
                     submits.forEach(button => { button.disabled = false; });
-                    message.textContent = `선택한 실제 위치: ${place.display_name || '가상 음식점 지점'}. 메뉴는 가상 음식점 데이터입니다.`;
+                    message.textContent = `선택한 지점: ${place.display_name || '가상 음식점 지점'}`;
                     // Expire before the server's 15-minute selection token expires.
                     expiry = setTimeout(() => { clearSelection(); message.textContent = '선택이 만료되었습니다. 다시 검색해 주세요.'; }, selectionExpires-Date.now());
                 });
-                label.append(radio, document.createTextNode(`위치 안내: ${place.display_name || '가상 음식점 지점'} / ${place.road_address || place.lot_address} / 직선거리 약 ${place.nearby_distance.toLocaleString()}m (도로거리 확인 전)`));
+                label.append(radio, document.createTextNode(`${place.display_name || '가상 음식점 지점'} / ${place.road_address || place.lot_address}`));
                 list.append(label);
             }
             more.hidden = data.is_end;
             page++;
-            message.textContent = seen.size ? '위치를 선택한 후 가상 메뉴를 담아 주세요. 실제 도로거리는 장바구니에서 검사합니다.' : '이 검색 페이지에는 검증된 주변 지점이 없습니다.';
+            message.textContent = seen.size ? '주문할 지점을 선택해 주세요.' : '주변에 이용 가능한 지점이 없습니다.';
         } catch (error) {
             if (currentGeneration !== generation) return;
             clearSelection();
